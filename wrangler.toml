@@ -1,4 +1,11 @@
 name = "ai-seo-cms"
-compatibility_date = "2024-01-01"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Placeholder - configure workers-specific settings here
+[vars]
+SITE_URL = "https://ai-seo-cms.pages.dev"
+ENABLE_TURNSTILE = "false"
+
+# Account binding for KV and D1
+account_id = "3e8c5385498b295ad3873e07c1b049e5"

@@ -1,48 +1,96 @@
-import { Router } from 'itty-router';
-import { handlePost } from './handlers/post';
-import { handleEntity } from './handlers/entity';
-import { handleSitemap } from './handlers/sitemap';
-import { handleSearch } from './handlers/search';
-import { handleRedirect } from './handlers/redirect';
+// Simple Cloudflare Worker - no dependencies
+const router = {
+  routes: [],
+  get: function(pattern, handler) {
+    this.routes.push({ method: 'GET', pattern, handler });
+    return this;
+  },
+  all: function(pattern, handler) {
+    this.routes.push({ method: '*', pattern, handler });
+    return this;
+  },
+  handle: async function(request) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
 
-const router = Router();
+    for (const route of this.routes) {
+      if (route.method !== request.method && route.method !== '*') continue;
 
-// 文章页面: /posts/:slug
-router.get('/posts/:slug', handlePost);
+      const patternRegex = new RegExp('^' + route.pattern.replace(/:(\w+)/g, '([^/]+)').replace(/\*/g, '.*') + '$');
+      const match = pathname.match(patternRegex);
 
-// 实体页面: /entity/:slug
-router.get('/entity/:slug', handleEntity);
+      if (match) {
+        return await route.handler(request, ...match.slice(1));
+      }
+    }
 
-// 站点地图: /sitemap.xml 和 /sitemap-:index.xml
-router.get('/sitemap.xml', handleSitemap);
-router.get('/sitemap-:index.xml', handleSitemap);
+    return new Response('Not Found', { status: 404 });
+  }
+};
 
-// 搜索 API: /api/search?q=xxx
-router.get('/api/search', handleSearch);
-
-// 联盟重定向: /go/:token
-router.get('/go/:token', handleRedirect);
-
-// 首页 (从 R2 读取预生成的 index.html)
-router.get('/', async (request, env) => {
-  const object = await env.CONTENT_BUCKET.get('index.html');
-  if (!object) return new Response('Not Found', { status: 404 });
-  return new Response(object.body, {
-    headers: { 'content-type': 'text/html; charset=utf-8' }
+// Routes
+router.get('/', () => {
+  return new Response(JSON.stringify({
+    service: 'AI SEO CMS Edge',
+    version: '1.0.0',
+    status: 'running',
+    message: 'Worker deployed successfully'
+  }), {
+    headers: { 'Content-Type': 'application/json' }
   });
 });
 
-// 404
+router.get('/sitemap.xml', (request, env) => {
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+</sitemapindex>`, {
+    headers: { 'Content-Type': 'application/xml' }
+  });
+});
+
+router.get('/posts/:slug', (request, env, slug) => {
+  return new Response(JSON.stringify({
+    slug,
+    message: 'Post not found - R2 bucket not configured yet'
+  }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
+router.get('/entity/:slug', (request, env, slug) => {
+  return new Response(JSON.stringify({
+    slug,
+    message: 'Entity not found - D1 not populated yet'
+  }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
+router.get('/api/search', (request) => {
+  const url = new URL(request.url);
+  const q = url.searchParams.get('q') || '';
+  return new Response(JSON.stringify({ query: q, results: [] }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
+router.get('/go/:token', (request, env, token) => {
+  return new Response(JSON.stringify({ token, redirect: 'Affiliate link - configure R2 bucket' }), {
+    status: 302,
+    headers: { 'Location': 'https://example.com/affiliate/' + token }
+  });
+});
+
 router.all('*', () => new Response('Not Found', { status: 404 }));
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return router.handle(request, env, ctx);
+    return await router.handle(request);
   }
 };
 
 interface Env {
-  CONTENT_BUCKET: R2Bucket;
+  CONTENT_BUCKET?: R2Bucket;
   CACHE_KV: KVNamespace;
   META_DB: D1Database;
   SITE_URL: string;

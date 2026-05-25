@@ -1,24 +1,21 @@
 name = "ai-seo-cms-edge"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 
-# R2 绑定 (静态 HTML 存储)
-[[r2_buckets]]
-binding = "CONTENT_BUCKET"
-bucket_name = "ai-seo-content"
+[vars]
+SITE_URL = "https://ai-seo-cms.pages.dev"
+ENABLE_TURNSTILE = "false"
 
-# KV 绑定 (缓存层)
+account_id = "3e8c5385498b295ad3873e07c1b049e5"
+
+# KV for caching
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "your-kv-namespace-id"
+id = "d9d116294afb4c0aa09ea59beb99e57c"
 
-# D1 绑定 (元数据只读副本)
+# D1 for metadata
 [[d1_databases]]
 binding = "META_DB"
 database_name = "ai-seo-meta"
-database_id = "your-d1-database-id"
-
-# 环境变量
-[vars]
-SITE_URL = "https://yoursite.com"
-ENABLE_TURNSTILE = "false"
+database_id = "1c177abe-8f7d-4c81-9846-f56f3542725b"
