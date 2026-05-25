@@ -128,6 +128,19 @@ export const EntityService = {
     return entity || null;
   },
 
+  async getAllEntities(): Promise<Entity[]> {
+    return db.query.entities.findMany();
+  },
+
+  async searchEntities(query: string): Promise<Entity[]> {
+    return db.query.entities.findMany({
+      where: or(
+        like(entities.name, `%${query}%`),
+        like(entities.description, `%${query}%`)
+      ),
+    });
+  },
+
   async upsertAttribute(entityId: number, key: string, value: string): Promise<void> {
     const existing = await db.query.entityAttributes.findFirst({
       where: and(eq(entityAttributes.entityId, entityId), eq(entityAttributes.key, key)),

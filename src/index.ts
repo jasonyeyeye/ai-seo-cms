@@ -8,6 +8,7 @@ import { contentRoutes } from './routes/content';
 import { ratingRoutes } from './routes/ratings';
 import { affiliateRoutes } from './routes/affiliates';
 import { dashboardRoutes } from './routes/dashboard';
+import { entityRoutes } from './routes/entities';
 
 const app = new Elysia()
   .use(cors())
@@ -17,6 +18,7 @@ const app = new Elysia()
   .use(ratingRoutes)
   .use(affiliateRoutes)
   .use(dashboardRoutes)
+  .use(entityRoutes)
   .get('/', () => {
     return `<!DOCTYPE html>
 <html lang="zh-CN">
