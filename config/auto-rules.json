@@ -1,0 +1,85 @@
+[
+  {
+    "id": "auto-approve-high-quality",
+    "name": "Auto-Approve High Quality",
+    "description": "Automatically approve suggestions from E-E-A-T scorer with score >= 8",
+    "enabled": false,
+    "conditions": [
+      {
+        "field": "source",
+        "operator": "equals",
+        "value": "eeat_scorer"
+      },
+      {
+        "field": "payload.eeatScore.overall",
+        "operator": "greater_than",
+        "value": 7
+      }
+    ],
+    "actions": [
+      {
+        "type": "approve"
+      }
+    ]
+  },
+  {
+    "id": "auto-reject-budget-warning",
+    "name": "Auto-Reject Budget Warnings",
+    "description": "Automatically reject budget warning suggestions (informational only)",
+    "enabled": false,
+    "conditions": [
+      {
+        "field": "type",
+        "operator": "equals",
+        "value": "budget_warning"
+      }
+    ],
+    "actions": [
+      {
+        "type": "reject"
+      }
+    ]
+  },
+  {
+    "id": "auto-tag-cannibalization",
+    "name": "Tag Cannibalization",
+    "description": "Add tag to cannibalization suggestions for priority review",
+    "enabled": false,
+    "conditions": [
+      {
+        "field": "type",
+        "operator": "equals",
+        "value": "cannibalization"
+      }
+    ],
+    "actions": [
+      {
+        "type": "tag",
+        "value": "priority-review"
+      }
+    ]
+  },
+  {
+    "id": "auto-noindex-archive",
+    "name": "Auto Noindex Archive",
+    "description": "Automatically execute noindex for archive stage posts",
+    "enabled": false,
+    "conditions": [
+      {
+        "field": "type",
+        "operator": "equals",
+        "value": "noindex_suggestion"
+      },
+      {
+        "field": "payload.currentStage",
+        "operator": "equals",
+        "value": "archive"
+      }
+    ],
+    "actions": [
+      {
+        "type": "execute"
+      }
+    ]
+  }
+]

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI SEO CMS - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div x-data="dashboard()" x-init="init()">
+    <!-- Header -->
+    <header class="bg-white shadow">
+      <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold text-gray-900">AI SEO CMS Dashboard</h1>
+          <div class="flex gap-4">
+            <a href="/api/dashboard/stats" target="_blank" class="text-sm text-gray-500 hover:text-gray-700">API</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats Overview -->
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="text-sm font-medium text-gray-500">Pending</div>
+          <div class="mt-2 text-3xl font-semibold text-yellow-600" x-text="stats.suggestions?.byStatus?.pending || 0"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="text-sm font-medium text-gray-500">Approved</div>
+          <div class="mt-2 text-3xl font-semibold text-green-600" x-text="stats.suggestions?.byStatus?.approved || 0"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="text-sm font-medium text-gray-500">Executed</div>
+          <div class="mt-2 text-3xl font-semibold text-blue-600" x-text="stats.suggestions?.byStatus?.executed || 0"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="text-sm font-medium text-gray-500">Published Posts</div>
+          <div class="mt-2 text-3xl font-semibold text-gray-900" x-text="stats.posts?.published || 0"></div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex flex-wrap gap-4 items-center">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select x-model="filters.status" @change="loadSuggestions()" class="border rounded-md px-3 py-2">
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="executed">Executed</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select x-model="filters.type" @change="loadSuggestions()" class="border rounded-md px-3 py-2">
+              <option value="">All</option>
+              <template x-for="type in Object.keys(stats.suggestions?.byType || {})" :key="type">
+                <option :value="type" x-text="type"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Source</label>
+            <select x-model="filters.source" @change="loadSuggestions()" class="border rounded-md px-3 py-2">
+              <option value="">All</option>
+              <template x-for="source in Object.keys(stats.suggestions?.bySource || {})" :key="source">
+                <option :value="source" x-text="source"></option>
+              </template>
+            </select>
+          </div>
+          <div class="ml-auto">
+            <button @click="refreshAll()" class="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-md">
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggestions Table -->
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="item in suggestions" :key="item.id">
+              <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="item.id"></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="px-2 py-1 text-xs rounded bg-gray-100" x-text="item.type"></span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="item.source"></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span
+                    class="px-2 py-1 text-xs rounded"
+                    :class="{
+                      'bg-yellow-100 text-yellow-800': item.status === 'pending',
+                      'bg-green-100 text-green-800': item.status === 'approved',
+                      'bg-red-100 text-red-800': item.status === 'rejected',
+                      'bg-blue-100 text-blue-800': item.status === 'executed'
+                    }"
+                    x-text="item.status"
+                  ></span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="new Date(item.createdAt).toLocaleString()"></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <div class="flex gap-2">
+                    <button @click="viewDetail(item)" class="text-blue-600 hover:text-blue-800">View</button>
+                    <template x-if="item.status === 'pending'">
+                      <div class="flex gap-2">
+                        <button @click="approve(item.id)" class="text-green-600 hover:text-green-800">Approve</button>
+                        <button @click="reject(item.id)" class="text-red-600 hover:text-red-800">Reject</button>
+                      </div>
+                    </template>
+                    <template x-if="item.status === 'approved'">
+                      <button @click="execute(item.id)" class="text-blue-600 hover:text-blue-800">Execute</button>
+                    </template>
+                    <template x-if="item.status === 'executed'">
+                      <button @click="rollback(item.id)" class="text-orange-600 hover:text-orange-800">Rollback</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="px-6 py-4 flex justify-between items-center border-t">
+          <div class="text-sm text-gray-500">
+            Showing <span x-text="((pagination.page - 1) * pagination.limit) + 1"></span> to
+            <span x-text="Math.min(pagination.page * pagination.limit, pagination.total)"></span> of
+            <span x-text="pagination.total"></span> results
+          </div>
+          <div class="flex gap-2">
+            <button
+              @click="page--; loadSuggestions()"
+              :disabled="pagination.page <= 1"
+              class="px-3 py-1 rounded bg-gray-100 disabled:opacity-50"
+            >Previous</button>
+            <button
+              @click="page++; loadSuggestions()"
+              :disabled="pagination.page >= pagination.totalPages"
+              class="px-3 py-1 rounded bg-gray-100 disabled:opacity-50"
+            >Next</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <div
+      x-show="showDetail"
+      x-cloak
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+      @click.self="showDetail = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-screen overflow-y-auto">
+        <div class="flex justify-between items-start mb-4">
+          <h2 class="text-xl font-bold">Suggestion Details</h2>
+          <button @click="showDetail = false" class="text-gray-500 hover:text-gray-700">&times;</button>
+        </div>
+        <template x-if="selectedItem">
+          <div>
+            <dl class="grid grid-cols-2 gap-4">
+              <div>
+                <dt class="text-sm font-medium text-gray-500">ID</dt>
+                <dd class="mt-1 text-sm text-gray-900" x-text="selectedItem.id"></dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">Type</dt>
+                <dd class="mt-1 text-sm text-gray-900" x-text="selectedItem.type"></dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">Target</dt>
+                <dd class="mt-1 text-sm text-gray-900" x-text="selectedItem.targetType + ' #' + selectedItem.targetId"></dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">Status</dt>
+                <dd class="mt-1 text-sm text-gray-900" x-text="selectedItem.status"></dd>
+              </div>
+              <div class="col-span-2">
+                <dt class="text-sm font-medium text-gray-500">Payload</dt>
+                <dd class="mt-1 text-sm">
+                  <pre class="bg-gray-100 p-2 rounded overflow-x-auto" x-text="JSON.stringify(selectedItem.payload, null, 2)"></pre>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function dashboard() {
+      return {
+        suggestions: [],
+        stats: { suggestions: {}, posts: {}, apiUsage: {} },
+        filters: { status: '', type: '', source: '' },
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        showDetail: false,
+        selectedItem: null,
+        page: 1,
+
+        async init() {
+          await this.loadStats();
+          await this.loadSuggestions();
+        },
+
+        async loadStats() {
+          try {
+            const res = await fetch('/api/dashboard/stats');
+            this.stats = await res.json();
+          } catch (e) {
+            console.error('Failed to load stats:', e);
+          }
+        },
+
+        async loadSuggestions() {
+          const params = new URLSearchParams({
+            page: this.page,
+            limit: 20,
+          });
+          if (this.filters.status) params.set('status', this.filters.status);
+          if (this.filters.type) params.set('type', this.filters.type);
+          if (this.filters.source) params.set('source', this.filters.source);
+
+          try {
+            const res = await fetch(`/api/dashboard/suggestions?${params}`);
+            const data = await res.json();
+            this.suggestions = data.data;
+            this.pagination = data.pagination;
+          } catch (e) {
+            console.error('Failed to load suggestions:', e);
+          }
+        },
+
+        async viewDetail(item) {
+          try {
+            const res = await fetch(`/api/dashboard/suggestions/${item.id}`);
+            this.selectedItem = await res.json();
+            this.showDetail = true;
+          } catch (e) {
+            console.error('Failed to load detail:', e);
+          }
+        },
+
+        async approve(id) {
+          await this.executeAction(id, 'approve');
+        },
+
+        async reject(id) {
+          await this.executeAction(id, 'reject');
+        },
+
+        async execute(id) {
+          await this.executeAction(id, 'execute');
+        },
+
+        async rollback(id) {
+          await this.executeAction(id, 'rollback');
+        },
+
+        async executeAction(id, action) {
+          try {
+            const res = await fetch(`/api/dashboard/suggestions/${id}/${action}`, { method: 'POST' });
+            const result = await res.json();
+            if (result.success) {
+              await this.loadSuggestions();
+              await this.loadStats();
+            } else {
+              alert(`Action failed: ${result.message}`);
+            }
+          } catch (e) {
+            console.error(`Failed to ${action}:`, e);
+          }
+        },
+
+        async refreshAll() {
+          await Promise.all([this.loadStats(), this.loadSuggestions()]);
+        }
+      };
+    }
+  </script>
+</body>
+</html>

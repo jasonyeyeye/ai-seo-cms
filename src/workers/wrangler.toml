@@ -1,0 +1,24 @@
+name = "ai-seo-cms-edge"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# R2 绑定 (静态 HTML 存储)
+[[r2_buckets]]
+binding = "CONTENT_BUCKET"
+bucket_name = "ai-seo-content"
+
+# KV 绑定 (缓存层)
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-namespace-id"
+
+# D1 绑定 (元数据只读副本)
+[[d1_databases]]
+binding = "META_DB"
+database_name = "ai-seo-meta"
+database_id = "your-d1-database-id"
+
+# 环境变量
+[vars]
+SITE_URL = "https://yoursite.com"
+ENABLE_TURNSTILE = "false"

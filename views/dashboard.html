@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI SEO CMS - Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen" x-data="dashboard()">
+  <div class="max-w-7xl mx-auto p-6">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">AI SEO CMS - Admin Dashboard</h1>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-gray-500 text-sm">Pending</div>
+        <div class="text-2xl font-bold text-yellow-500" x-text="stats.suggestions?.byStatus?.pending || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-gray-500 text-sm">Executed Today</div>
+        <div class="text-2xl font-bold text-green-500" x-text="stats.suggestions?.byStatus?.executed || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-gray-500 text-sm">Total Suggestions</div>
+        <div class="text-2xl font-bold text-blue-500" x-text="totalSuggestions"></div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-gray-500 text-sm">Published Posts</div>
+        <div class="text-2xl font-bold text-purple-500" x-text="stats.posts?.published || 0"></div>
+      </div>
+    </div>
+
+    <!-- Suggestion List -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Suggestions</h2>
+        <div class="flex gap-2">
+          <select x-model="filters.status" @change="loadSuggestions()" class="border rounded px-3 py-2">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="executed">Executed</option>
+          </select>
+          <select x-model="filters.type" @change="loadSuggestions()" class="border rounded px-3 py-2">
+            <option value="">All Types</option>
+            <option value="quality_rejection">Quality Rejection</option>
+            <option value="noindex_suggestion">Noindex Suggestion</option>
+            <option value="internal_link">Internal Link</option>
+            <option value="cannibalization">Cannibalization</option>
+            <option value="budget_warning">Budget Warning</option>
+            <option value="info_gain_failed">Info Gain Failed</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Suggestion Table -->
+      <table class="w-full text-left">
+        <thead>
+          <tr class="border-b">
+            <th class="pb-3">ID</th>
+            <th class="pb-3">Type</th>
+            <th class="pb-3">Source</th>
+            <th class="pb-3">Status</th>
+            <th class="pb-3">Created</th>
+            <th class="pb-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="suggestion in suggestions" :key="suggestion.id">
+            <tr class="border-b hover:bg-gray-50">
+              <td class="py-3" x-text="suggestion.id"></td>
+              <td class="py-3">
+                <span class="px-2 py-1 text-xs rounded"
+                      :class="{
+                        'bg-red-100 text-red-800': suggestion.type === 'quality_rejection',
+                        'bg-orange-100 text-orange-800': suggestion.type === 'noindex_suggestion',
+                        'bg-blue-100 text-blue-800': suggestion.type === 'internal_link',
+                        'bg-yellow-100 text-yellow-800': suggestion.type === 'cannibalization',
+                        'bg-gray-100 text-gray-800': suggestion.type === 'budget_warning',
+                        'bg-purple-100 text-purple-800': suggestion.type === 'info_gain_failed'
+                      }"
+                      x-text="suggestion.type.replace('_', ' ')"></span>
+              </td>
+              <td class="py-3" x-text="suggestion.source"></td>
+              <td class="py-3">
+                <span class="px-2 py-1 text-xs rounded"
+                      :class="{
+                        'bg-yellow-100 text-yellow-800': suggestion.status === 'pending',
+                        'bg-green-100 text-green-800': suggestion.status === 'approved',
+                        'bg-red-100 text-red-800': suggestion.status === 'rejected',
+                        'bg-blue-100 text-blue-800': suggestion.status === 'executed'
+                      }"
+                      x-text="suggestion.status"></span>
+              </td>
+              <td class="py-3" x-text="new Date(suggestion.createdAt).toLocaleDateString()"></td>
+              <td class="py-3 flex gap-2">
+                <template x-if="suggestion.status === 'pending'">
+                  <div class="flex gap-2">
+                    <button @click="approveSuggestion(suggestion.id)" class="text-green-600 hover:text-green-800 text-sm">Approve</button>
+                    <button @click="rejectSuggestion(suggestion.id)" class="text-red-600 hover:text-red-800 text-sm">Reject</button>
+                  </div>
+                </template>
+                <template x-if="suggestion.status === 'approved'">
+                  <button @click="executeSuggestion(suggestion.id)" class="text-blue-600 hover:text-blue-800 text-sm">Execute</button>
+                </template>
+                <template x-if="suggestion.status === 'executed'">
+                  <button @click="rollbackSuggestion(suggestion.id)" class="text-orange-600 hover:text-orange-800 text-sm">Rollback</button>
+                </template>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
+      <!-- Pagination -->
+      <div class="flex justify-between items-center mt-4">
+        <div class="text-sm text-gray-500">
+          Showing <span x-text="((pagination.page - 1) * pagination.limit) + 1"></span> to
+          <span x-text="Math.min(pagination.page * pagination.limit, pagination.total)"></span> of
+          <span x-text="pagination.total"></span>
+        </div>
+        <div class="flex gap-2">
+          <button @click="prevPage()" :disabled="pagination.page <= 1"
+                  class="px-3 py-1 border rounded disabled:opacity-50">Previous</button>
+          <button @click="nextPage()" :disabled="pagination.page >= pagination.totalPages"
+                  class="px-3 py-1 border rounded disabled:opacity-50">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto Rules -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-xl font-semibold mb-4">Auto Rules</h2>
+      <div class="space-y-3">
+        <template x-for="rule in rules" :key="rule.id">
+          <div class="flex items-center justify-between p-3 border rounded">
+            <div>
+              <div class="font-medium" x-text="rule.name"></div>
+              <div class="text-sm text-gray-500" x-text="rule.description"></div>
+            </div>
+            <label class="flex items-center cursor-pointer">
+              <input type="checkbox" x-model="rule.enabled" @change="toggleRule(rule.id, rule.enabled)"
+                     class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-2 text-sm">Enabled</span>
+            </label>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function dashboard() {
+      return {
+        suggestions: [],
+        stats: {},
+        rules: [],
+        filters: {
+          status: '',
+          type: '',
+          source: ''
+        },
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0
+        },
+
+        init() {
+          this.loadSuggestions();
+          this.loadStats();
+          this.loadRules();
+        },
+
+        get totalSuggestions() {
+          return this.stats.suggestions?.byStatus?.pending || 0 +
+                 this.stats.suggestions?.byStatus?.approved || 0 +
+                 this.stats.suggestions?.byStatus?.rejected || 0 +
+                 this.stats.suggestions?.byStatus?.executed || 0;
+        },
+
+        async loadSuggestions() {
+          const params = new URLSearchParams({
+            page: this.pagination.page,
+            limit: this.pagination.limit
+          });
+          if (this.filters.status) params.append('status', this.filters.status);
+          if (this.filters.type) params.append('type', this.filters.type);
+
+          const res = await fetch(`/api/dashboard/suggestions?${params}`);
+          const data = await res.json();
+          this.suggestions = data.data;
+          this.pagination = data.pagination;
+        },
+
+        async loadStats() {
+          const res = await fetch('/api/dashboard/stats');
+          this.stats = await res.json();
+        },
+
+        async loadRules() {
+          // Rules are loaded from the config file
+          // In a real implementation, there would be an API endpoint
+          const defaultRules = [
+            { id: 'auto-approve-high-quality', name: 'Auto-Approve High Quality', description: 'Automatically approve suggestions from E-E-A-T scorer with score >= 8', enabled: false },
+            { id: 'auto-reject-budget-warning', name: 'Auto-Reject Budget Warnings', description: 'Automatically reject budget warning suggestions', enabled: false },
+            { id: 'auto-tag-cannibalization', name: 'Tag Cannibalization', description: 'Add tag to cannibalization suggestions', enabled: false }
+          ];
+          this.rules = defaultRules;
+        },
+
+        async approveSuggestion(id) {
+          await fetch(`/api/dashboard/suggestions/${id}/approve`, { method: 'POST' });
+          await this.loadSuggestions();
+          await this.loadStats();
+        },
+
+        async rejectSuggestion(id) {
+          await fetch(`/api/dashboard/suggestions/${id}/reject`, { method: 'POST' });
+          await this.loadSuggestions();
+          await this.loadStats();
+        },
+
+        async executeSuggestion(id) {
+          await fetch(`/api/dashboard/suggestions/${id}/execute`, { method: 'POST' });
+          await this.loadSuggestions();
+          await this.loadStats();
+        },
+
+        async rollbackSuggestion(id) {
+          await fetch(`/api/dashboard/suggestions/${id}/rollback`, { method: 'POST' });
+          await this.loadSuggestions();
+          await this.loadStats();
+        },
+
+        async toggleRule(ruleId, enabled) {
+          console.log(`Rule ${ruleId} toggled to ${enabled}`);
+          // In a real implementation, this would call an API endpoint
+        },
+
+        prevPage() {
+          if (this.pagination.page > 1) {
+            this.pagination.page--;
+            this.loadSuggestions();
+          }
+        },
+
+        nextPage() {
+          if (this.pagination.page < this.pagination.totalPages) {
+            this.pagination.page++;
+            this.loadSuggestions();
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>
