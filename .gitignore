@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build output
+# dist/ - uncomment to exclude production static files
+.wrangler/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test artifacts
+playwright-report/
+test-results/
+playwright/screenshots/
+
+# SQLite
+*.db
+*.db-journal
+
+# Lock files (keep package-lock for production)
+# bun.lock
+
+# Temp files
+tmp/
+temp/
+*.tmp
+
+# Cloudflare
+.wrangler/
+.dev.vars

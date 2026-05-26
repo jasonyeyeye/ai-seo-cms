@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="pageTitle">商品对比 - AI Shopping</title>
+  <meta name="description" :content="'对比 ' + productNames + ' 的价格、评分、规格参数，帮助您做出更好的购买决策。'" />
+  <link rel="canonical" :href="currentUrl" />
+  <script>
+    (function() {
+      const stored = localStorage.getItem('darkMode');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'true' || (stored === null && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- ProductList Schema for Comparison -->
+  <template x-if="products.length > 0">
+    <script type="application/ld+json" x-json="JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      'name': 'Product Comparison: ' + productNames,
+      'description': 'Compare prices, ratings and specifications of ' + productNames,
+      'url': currentUrl,
+      'numberOfItems': products.length,
+      'itemListElement': products.map((p, i) => ({
+        '@type': 'ListItem',
+        'position': i + 1,
+        'url': '/product/' + p.slug
+      }))
+    })"></script>
+  </template>
+</head>
+<body class="bg-gray-50 min-h-screen dark:bg-gray-900">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50 dark:bg-gray-800 dark:border-gray-700" x-data="{ mobileMenuOpen: false, darkMode: localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches }">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-14 sm:h-16">
+        <div class="flex items-center space-x-4">
+          <a href="/" class="text-xl font-bold text-indigo-600 hover:text-indigo-700">AI Shopping</a>
+          <nav class="hidden md:flex items-center text-sm text-gray-500 space-x-1 dark:text-gray-400">
+            <a href="/" class="hover:text-indigo-600 dark:hover:text-indigo-400">首页</a>
+            <span>/</span>
+            <span class="text-gray-900 dark:text-gray-100">商品对比</span>
+          </nav>
+        </div>
+        <div class="flex items-center">
+          <a href="/search" class="p-2 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <i class="fas fa-search text-gray-600 dark:text-gray-400"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Header -->
+  <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white py-6 px-4">
+    <div class="max-w-7xl mx-auto">
+      <h1 class="text-2xl sm:text-3xl font-bold mb-2 flex items-center gap-2">
+        <i class="fas fa-balance-scale"></i> 商品对比
+      </h1>
+      <p class="text-orange-100 text-sm">比较多个商品的规格、价格和评分</p>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="max-w-7xl mx-auto px-4 py-20 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+    <p class="text-gray-500 mt-3">加载中...</p>
+  </div>
+
+  <!-- Error State -->
+  <div x-show="error && !loading" class="max-w-7xl mx-auto px-4 py-20 text-center">
+    <div class="text-6xl mb-4">😕</div>
+    <h2 class="text-xl font-bold text-gray-900 mb-2 dark:text-gray-100">无法加载对比</h2>
+    <p class="text-gray-500 mb-6">请检查商品链接是否正确</p>
+    <a href="/products" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">浏览全部商品</a>
+  </div>
+
+  <!-- Comparison Content -->
+  <main x-show="!loading && !error && products.length > 0" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div class="text-sm text-gray-500 dark:text-gray-400">
+        <span x-text="products.length"></span> 个商品对比中
+      </div>
+      <div class="flex gap-2">
+        <a href="/products" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300">
+          <i class="fas fa-plus"></i> 添加更多商品
+        </a>
+        <button @click="shareCompare" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2">
+          <i class="fas fa-share"></i> 分享对比
+        </button>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="overflow-x-auto mb-8">
+      <table class="w-full bg-white rounded-xl shadow-sm overflow-hidden dark:bg-gray-800">
+        <thead>
+          <tr>
+            <th class="w-40 px-4 py-3 text-left text-sm font-semibold text-gray-700 bg-gray-50 border-b dark:text-gray-300 dark:bg-gray-700">对比维度</th>
+            <template x-for="product in products" :key="product.id">
+              <th class="w-64 px-4 py-3 text-center border-b dark:border-gray-700">
+                <div class="relative">
+                  <button @click="removeProduct(product.slug)" class="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600">
+                    <i class="fas fa-times"></i>
+                  </button>
+                  <a :href="'/product/' + product.slug" class="block">
+                    <img :src="product.thumbnailUrl || '/placeholder.png'" :alt="product.name" class="w-24 h-24 object-cover rounded-lg mx-auto mb-2" loading="lazy" />
+                    <div class="text-sm font-medium text-gray-900 line-clamp-2 dark:text-gray-100" x-text="product.name"></div>
+                    <div x-show="product.brand" class="text-xs text-gray-400 mt-1 dark:text-gray-500" x-text="product.brand"></div>
+                  </a>
+                </div>
+              </th>
+            </template>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-b dark:border-gray-700">
+            <td class="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-700">价格</td>
+            <template x-for="product in products" :key="product.id">
+              <td class="px-4 py-3 text-center">
+                <div x-show="getPlatformPrice(product)">
+                  <span class="text-xl font-bold text-indigo-600 dark:text-indigo-400" x-text="formatPrice(getPlatformPrice(product))"></span>
+                  <div x-show="getPlatformName(product)" class="text-xs text-gray-400 dark:text-gray-500" x-text="getPlatformName(product)"></div>
+                </div>
+                <div x-show="!getPlatformPrice(product)" class="text-gray-400">价格待定</div>
+              </td>
+            </template>
+          </tr>
+          <tr class="border-b dark:border-gray-700">
+            <td class="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-700">评分</td>
+            <template x-for="product in products" :key="product.id">
+              <td class="px-4 py-3 text-center">
+                <div x-show="product.averageRating" class="flex items-center justify-center gap-1">
+                  <div class="flex text-yellow-400">
+                    <i class="fas fa-star"></i>
+                    <i class="fas fa-star"></i>
+                    <i class="fas fa-star"></i>
+                    <i class="fas fa-star"></i>
+                    <i class="fas fa-star"></i>
+                  </div>
+                  <span class="text-sm font-medium dark:text-gray-300" x-text="product.averageRating ? product.averageRating.toFixed(1) : '-'"></span>
+                </div>
+                <div x-show="!product.averageRating" class="text-gray-400">暂无评分</div>
+              </td>
+            </template>
+          </tr>
+          <tr class="border-b dark:border-gray-700">
+            <td class="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-700">品牌</td>
+            <template x-for="product in products" :key="product.id">
+              <td class="px-4 py-3 text-center text-sm text-gray-900 dark:text-gray-100">
+                <span x-show="product.brand" x-text="product.brand"></span>
+                <span x-show="!product.brand" class="text-gray-400">-</span>
+              </td>
+            </template>
+          </tr>
+          <tr class="border-b dark:border-gray-700">
+            <td class="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-700">购买平台</td>
+            <template x-for="product in products" :key="product.id">
+              <td class="px-4 py-3 text-center">
+                <div x-show="product.platforms && product.platforms.length > 0" class="flex flex-wrap gap-1 justify-center">
+                  <template x-for="pp in (product.platforms || [])" :key="pp.id">
+                    <span class="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full dark:bg-gray-700 dark:text-gray-300" x-text="pp.platform"></span>
+                  </template>
+                </div>
+                <span x-show="!product.platforms || product.platforms.length === 0" class="text-gray-400">暂无平台</span>
+              </td>
+            </template>
+          </tr>
+          <tr class="border-b dark:border-gray-700">
+            <td class="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-700">购买链接</td>
+            <template x-for="product in products" :key="product.id">
+              <td class="px-4 py-3 text-center">
+                <a x-show="getPrimaryAffiliateToken(product)" :href="'/go/' + getPrimaryAffiliateToken(product)" target="_blank" rel="noopener sponsored" class="inline-block px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">
+                  <i class="fas fa-shopping-cart mr-1"></i> 购买
+                </a>
+                <span x-show="!getPrimaryAffiliateToken(product)" class="text-gray-400 text-sm">暂无可用链接</span>
+              </td>
+            </template>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- AI Summary -->
+    <div x-show="aiSummaryPoints.length > 0" class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 mb-8 dark:from-gray-800 dark:to-gray-700">
+      <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center dark:text-gray-100">
+        <span class="mr-2">🤖</span> AI 对比分析
+      </h2>
+      <div class="prose prose-sm max-w-none">
+        <template x-for="(point, idx) in aiSummaryPoints" :key="idx">
+          <div class="mb-3 flex items-start gap-3">
+            <div class="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-medium dark:bg-indigo-900 dark:text-indigo-400" x-text="idx + 1"></div>
+            <p class="text-gray-700 dark:text-gray-300" x-text="point"></p>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Recommendation -->
+    <div x-show="recommendation" class="bg-green-50 rounded-xl p-6 dark:bg-green-900/30">
+      <h2 class="text-lg font-bold text-green-800 mb-3 flex items-center dark:text-green-300">
+        <span class="mr-2">💡</span> 购物推荐
+      </h2>
+      <p class="text-green-700 dark:text-green-300" x-text="recommendation"></p>
+      <a :href="'/product/' + recommendedSlug" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+        <i class="fas fa-eye"></i> 查看推荐商品
+      </a>
+    </div>
+
+    <div class="text-center mt-8">
+      <a href="/products" class="text-indigo-600 hover:underline inline-flex items-center gap-2 dark:text-indigo-400">
+        <i class="fas fa-arrow-left"></i> 返回商品列表
+      </a>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
+      <p class="mb-4"><strong>联盟信息披露：</strong>详见 <a href="/affiliate-disclosure" class="text-indigo-400 hover:underline">联盟信息披露</a>。</p>
+      <p>&copy; <span x-text="new Date().getFullYear()">2026</span> AI Shopping. AI驱动的全球商品推荐平台.</p>
+    </div>
+  </footer>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('comparePage', () => ({
+      loading: true,
+      error: false,
+      products: [],
+      productNames: '',
+      pageTitle: '商品对比 - AI Shopping',
+      currentUrl: '',
+      aiSummaryPoints: [],
+      recommendation: '',
+      recommendedSlug: '',
+      async init() {
+        this.currentUrl = window.location.href;
+        const path = window.location.pathname;
+        const match = path.match(/\/compare\/(.+)/);
+        if (!match) {
+          this.error = true;
+          this.loading = false;
+          return;
+        }
+        const slugsParam = match[1];
+        const slugs = slugsParam.split('-vs-');
+        if (slugs.length < 2 || slugs.length > 4) {
+          this.error = true;
+          this.loading = false;
+          return;
+        }
+        await this.loadProducts(slugs);
+      },
+      async loadProducts(slugs) {
+        this.loading = true;
+        try {
+          const loadPromises = slugs.map(slug => this.loadProduct(slug));
+          const results = await Promise.all(loadPromises);
+          this.products = results.filter(p => p !== null);
+          if (this.products.length < 2) {
+            this.error = true;
+            this.loading = false;
+            return;
+          }
+          this.productNames = this.products.map(p => p.name).join(' vs ');
+          this.pageTitle = this.productNames + ' - 商品对比';
+          this.generateAiSummary();
+          document.title = this.pageTitle + ' - AI Shopping';
+        } catch(e) {
+          console.error(e);
+          this.error = true;
+        }
+        this.loading = false;
+      },
+      async loadProduct(slug) {
+        try {
+          const res = await fetch('/api/products/slug/' + encodeURIComponent(slug));
+          if (!res.ok) return null;
+          const data = await res.json();
+          if (data.product && data.product.id) {
+            const platRes = await fetch('/api/products/' + data.product.id + '/platforms');
+            if (platRes.ok) {
+              const platData = await platRes.json();
+              data.product.platforms = platData.platforms || [];
+            }
+          }
+          return data.product;
+        } catch(e) {
+          console.error(e);
+          return null;
+        }
+      },
+      getPlatformPrice(product) {
+        if (!product.platforms || product.platforms.length === 0) return null;
+        const pp = product.platforms.find(p => p.currentPrice) || product.platforms[0];
+        return pp ? pp.currentPrice : null;
+      },
+      getPlatformName(product) {
+        if (!product.platforms || product.platforms.length === 0) return null;
+        const pp = product.platforms.find(p => p.currentPrice) || product.platforms[0];
+        return pp ? pp.platform : null;
+      },
+      getPrimaryAffiliateToken(product) {
+        if (!product.platforms || product.platforms.length === 0) return null;
+        const pp = product.platforms.find(p => p.affiliateToken) || product.platforms[0];
+        return pp ? pp.affiliateToken : null;
+      },
+      generateAiSummary() {
+        const points = [];
+        const prices = this.products.map(p => this.getPlatformPrice(p)).filter(Boolean);
+        if (prices.length > 1) {
+          const minPrice = Math.min(...prices);
+          const cheapestIdx = prices.indexOf(minPrice);
+          if (prices.filter(p => p === minPrice).length === 1) {
+            points.push(this.products[cheapestIdx].name + ' 价格最低，为 $' + minPrice.toFixed(2));
+          }
+        }
+        const ratings = this.products.filter(p => p.averageRating).map(p => p.averageRating);
+        if (ratings.length > 0) {
+          const bestRating = Math.max(...ratings);
+          const bestProduct = this.products.find(p => p.averageRating === bestRating);
+          if (bestProduct) {
+            points.push(bestProduct.name + ' 评分最高，为 ' + bestRating.toFixed(1) + ' 星');
+          }
+        }
+        if (points.length === 0) {
+          points.push('这些商品各有特点，建议根据个人需求选择');
+        }
+        this.aiSummaryPoints = points;
+        const bestPriceIdx = prices.length > 0 ? prices.indexOf(Math.min(...prices)) : 0;
+        const bestRatingIdx = ratings.length > 0 ? this.products.findIndex(p => p.averageRating === Math.max(...ratings)) : 0;
+        let recommendedIdx = ratings.length > 0 ? bestRatingIdx : bestPriceIdx;
+        this.recommendedSlug = this.products[recommendedIdx].slug;
+        this.recommendation = '综合考虑价格和评分，我们推荐 ' + this.products[recommendedIdx].name + '。';
+      },
+      removeProduct(slug) {
+        if (this.products.length <= 2) {
+          alert('至少需要2个商品进行对比');
+          return;
+        }
+        this.products = this.products.filter(p => p.slug !== slug);
+        this.productNames = this.products.map(p => p.name).join(' vs ');
+        this.pageTitle = this.productNames + ' - 商品对比';
+        document.title = this.pageTitle + ' - AI Shopping';
+        this.generateAiSummary();
+      },
+      shareCompare() {
+        if (navigator.share) {
+          navigator.share({
+            title: this.pageTitle,
+            text: '查看商品对比：' + this.productNames,
+            url: this.currentUrl
+          });
+        } else {
+          navigator.clipboard.writeText(this.currentUrl);
+          alert('链接已复制到剪贴板');
+        }
+      },
+      formatPrice(price) {
+        if (!price) return '';
+        return '$' + parseFloat(price).toFixed(2);
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

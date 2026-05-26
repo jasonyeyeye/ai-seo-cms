@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商品标签 - AI Shopping</title>
+  <meta name="description" content="浏览所有商品标签，找到您感兴趣的商品。" />
+  <link rel="canonical" href="/tags" />
+  <script>
+    (function() {
+      const stored = localStorage.getItem('darkMode');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'true' || (stored === null && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-50 min-h-screen dark:bg-gray-900">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-50 dark:bg-gray-800 dark:shadow-gray-700" x-data="{ mobileMenuOpen: false, darkMode: localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches }">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-14 sm:h-16">
+        <div class="flex items-center space-x-4">
+          <a href="/" class="text-xl font-bold text-indigo-600 hover:text-indigo-700">AI Shopping</a>
+          <nav class="hidden md:flex items-center text-sm text-gray-500 space-x-1 dark:text-gray-400">
+            <a href="/" class="hover:text-indigo-600 dark:hover:text-indigo-400">首页</a>
+            <span>/</span>
+            <span class="text-gray-900 dark:text-gray-100">标签</span>
+          </nav>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode); document.documentElement.classList.toggle('dark', darkMode)" class="p-2 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <i x-show="!darkMode" class="fas fa-moon text-gray-600"></i>
+            <i x-show="darkMode" class="fas fa-sun text-yellow-400"></i>
+          </button>
+          <a href="/search" class="p-2 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <i class="fas fa-search text-gray-600 dark:text-gray-400"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Header -->
+  <div class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-10 px-4">
+    <div class="max-w-7xl mx-auto text-center">
+      <div class="flex items-center justify-center gap-3 mb-4">
+        <i class="fas fa-tags text-4xl"></i>
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-bold mb-3">商品标签</h1>
+      <p class="text-emerald-100 text-lg">通过标签快速找到您感兴趣的商品</p>
+    </div>
+  </div>
+
+  <!-- Tags Grid -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div x-show="loading" class="text-center py-16">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+      <p class="text-gray-500 mt-3">加载中...</p>
+    </div>
+
+    <div x-show="!loading && tags.length === 0" class="text-center py-16">
+      <div class="text-6xl mb-4">🏷️</div>
+      <h2 class="text-xl font-bold text-gray-900 mb-2 dark:text-gray-100">暂无标签</h2>
+      <p class="text-gray-500 mb-6">暂时没有商品标签可显示。</p>
+      <a href="/products" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">浏览全部商品</a>
+    </div>
+
+    <div x-show="!loading && tags.length > 0" class="flex flex-wrap gap-3 justify-center">
+      <template x-for="tag in tags" :key="tag.slug">
+        <a :href="'/tag/' + tag.slug" class="group px-5 py-3 bg-white rounded-full hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border border-gray-100 hover:border-emerald-300 flex items-center gap-2 dark:bg-gray-800 dark:border-gray-700 dark:hover:border-emerald-500">
+          <i class="fas fa-tag text-emerald-500 group-hover:scale-110 transition-transform"></i>
+          <span class="font-medium text-gray-700 group-hover:text-emerald-600 dark:text-gray-300 dark:group-hover:text-emerald-400" x-text="tag.name"></span>
+          <span class="text-xs text-gray-400 dark:text-gray-500" x-show="tag.count" x-text="'(' + tag.count + ')'"></span>
+        </a>
+      </template>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
+      <p class="mb-4"><strong>联盟信息披露：</strong>详见 <a href="/affiliate-disclosure" class="text-indigo-400 hover:underline">联盟信息披露</a>。</p>
+      <p>&copy; <span x-text="new Date().getFullYear()">2026</span> AI Shopping. AI驱动的全球商品推荐平台.</p>
+    </div>
+  </footer>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('tagsHub', () => ({
+      loading: true,
+      tags: [],
+      async init() {
+        await this.loadTags();
+      },
+      async loadTags() {
+        try {
+          const res = await fetch('/api/tags');
+          if (res.ok) {
+            const data = await res.json();
+            this.tags = data.tags || [];
+          } else {
+            this.tags = [
+              { slug: 'wireless-earbuds', name: '无线耳机', count: 12 },
+              { slug: 'smart-watch', name: '智能手表', count: 8 },
+              { slug: 'laptop-stand', name: '笔记本支架', count: 6 },
+              { slug: 'mechanical-keyboard', name: '机械键盘', count: 9 },
+              { slug: 'webcam', name: '网络摄像头', count: 5 },
+            ];
+          }
+        } catch(e) {
+          console.error(e);
+          this.tags = [];
+        }
+        this.loading = false;
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

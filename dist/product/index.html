@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title x-text="product ? product.name + ' - AI Shopping' : '商品详情 - AI Shopping'">商品详情 - AI Shopping</title>
+  <meta name="description" :content="product ? (product.summary || product.description || product.name) : ''" />
+  <link rel="canonical" :href="product ? '/product/' + product.slug : ''" />
+  <meta property="og:type" content="product" />
+  <meta property="og:title" :content="product ? product.name + ' - AI Shopping' : 'AI Shopping'" />
+  <meta property="og:description" :content="product ? (product.summary || product.description || product.name) : ''" />
+  <meta property="og:image" :content="product ? (product.thumbnailUrl || '/placeholder.png') : ''" />
+  <meta property="og:url" :content="product ? '/product/' + product.slug : ''" />
+  <meta property="og:site_name" content="AI Shopping" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <script>
+    (function() {
+      const stored = localStorage.getItem('darkMode');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'true' || (stored === null && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async></script>
+
+  <!-- Product Schema -->
+  <template x-if="product">
+    <script type="application/ld+json" x-json="JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      'name': product.name,
+      'description': product.description,
+      'image': product.images || [product.thumbnailUrl],
+      'brand': { '@type': 'Brand', 'name': product.brand },
+      'offers': {
+        '@type': 'Offer',
+        'price': platformProduct ? platformProduct.currentPrice : '',
+        'priceCurrency': platformProduct ? platformProduct.currency || 'USD' : 'USD',
+        'availability': platformProduct && platformProduct.stockStatus === 'in_stock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        'seller': { '@type': 'Organization', 'name': product.platform || 'AI Shopping' }
+      },
+      'aggregateRating': product.averageRating ? {
+        '@type': 'AggregateRating',
+        'ratingValue': product.averageRating,
+        'reviewCount': product.reviewCount || 0
+      } : undefined
+    })"></script>
+  </template>
+
+  <!-- FAQPage Schema -->
+  <template x-if="product && product.faq && product.faq.length">
+    <script type="application/ld+json" x-json="JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      'mainEntity': product.faq.map(f => ({
+        '@type': 'Question',
+        'name': f.q,
+        'acceptedAnswer': { '@type': 'Answer', 'text': f.a }
+      }))
+    })"></script>
+  </template>
+
+  <!-- BreadcrumbList Schema -->
+  <template x-if="product">
+    <script type="application/ld+json" x-json="JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      'itemListElement': [
+        { '@type': 'ListItem', 'position': 1, 'name': '首页', 'item': '/' },
+        { '@type': 'ListItem', 'position': 2, 'name': product.category || '分类', 'item': '/category/' + (product.categorySlug || '') },
+        { '@type': 'ListItem', 'position': 3, 'name': product.name }
+      ]
+    })"></script>
+  </template>
+</head>
+<body class="bg-gray-50 min-h-screen dark:bg-gray-900">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-50 dark:bg-gray-800 dark:shadow-gray-700" x-data="{ mobileMenuOpen: false, darkMode: localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches }">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-14 sm:h-16">
+        <a href="/" class="text-xl sm:text-2xl font-bold text-indigo-600 hover:text-indigo-700">AI Shopping</a>
+        <div class="flex items-center gap-2">
+          <button @click="darkMode = !darkMode; localStorage.setItem('darkMode', darkMode); document.documentElement.classList.toggle('dark', darkMode)" class="p-2 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" aria-label="切换暗色模式">
+            <i x-show="!darkMode" class="fas fa-moon text-gray-600"></i>
+            <i x-show="darkMode" class="fas fa-sun text-yellow-400"></i>
+          </button>
+          <a href="/search" class="p-2 min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <i class="fas fa-search text-gray-600 dark:text-gray-400"></i>
+          </a>
+          <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden p-2 min-w-[48px] min-h-[48px] flex items-center justify-center -mr-2" aria-label="打开菜单">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading -->
+  <div x-show="loading" class="max-w-7xl mx-auto px-4 py-20 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+    <p class="text-gray-500 mt-3">加载中...</p>
+  </div>
+
+  <!-- Error State -->
+  <div x-show="error && !loading" class="max-w-7xl mx-auto px-4 py-20 text-center">
+    <div class="text-6xl mb-4">😕</div>
+    <h2 class="text-xl font-bold text-gray-900 mb-2 dark:text-gray-100">商品未找到</h2>
+    <p class="text-gray-500 mb-6">抱歉，该商品可能已下架或不存在。</p>
+    <a href="/products" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">浏览全部商品</a>
+  </div>
+
+  <!-- Product Content -->
+  <main x-show="product && !loading" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+      <!-- Image Gallery -->
+      <div class="space-y-4">
+        <div class="aspect-square bg-white rounded-2xl overflow-hidden shadow-sm dark:bg-gray-800">
+          <img :src="selectedImage || product.thumbnailUrl || '/placeholder.png'" :alt="product.name" class="w-full h-full object-contain" />
+        </div>
+        <div x-show="product.images && product.images.length > 1" class="flex gap-3 overflow-x-auto pb-2">
+          <template x-for="(img, idx) in product.images" :key="idx">
+            <button @click="selectedImage = img" class="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 dark:border-gray-600" :class="selectedImage === img ? 'border-indigo-500' : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'">
+              <img :src="img" class="w-full h-full object-cover" loading="lazy" />
+            </button>
+          </template>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <template x-for="pp in product.platformProducts || []" :key="pp.id">
+            <span class="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium dark:bg-gray-700 dark:text-gray-300" x-text="pp.platform"></span>
+          </template>
+        </div>
+      </div>
+
+      <!-- Product Info -->
+      <div>
+        <div x-show="product.brand" class="text-sm text-gray-500 mb-1 dark:text-gray-400">
+          <a :href="'/brand/' + product.brandSlug" class="hover:text-indigo-600 dark:hover:text-indigo-400" x-text="product.brand"></a>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 dark:text-gray-100" x-text="product.name"></h1>
+
+        <!-- Rating -->
+        <div x-show="product.averageRating" class="flex items-center gap-2 mb-4">
+          <div class="flex text-yellow-400 text-lg">
+            <i class="fas fa-star"></i>
+            <i class="fas fa-star"></i>
+            <i class="fas fa-star"></i>
+            <i class="fas fa-star"></i>
+            <i class="fas fa-star"></i>
+          </div>
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300" x-text="(product.averageRating || 0).toFixed(1)"></span>
+          <span class="text-sm text-gray-400" x-text="(product.reviewCount || 0) + ' 条评论'"></span>
+        </div>
+
+        <!-- Price Block -->
+        <div class="bg-gray-50 rounded-xl p-6 mb-6 dark:bg-gray-800">
+          <template x-if="platformProduct">
+            <div>
+              <div class="flex items-baseline gap-3 mb-2">
+                <span class="text-3xl font-bold text-indigo-600 dark:text-indigo-400" x-text="formatPrice(platformProduct.currentPrice, platformProduct.currency)"></span>
+                <span x-show="platformProduct.originalPrice && platformProduct.originalPrice > platformProduct.currentPrice" class="text-lg text-gray-400 line-through dark:text-gray-500" x-text="formatPrice(platformProduct.originalPrice, platformProduct.currency)"></span>
+                <span x-show="platformProduct.discountPercent" class="px-2 py-1 bg-red-100 text-red-600 text-sm font-bold rounded dark:bg-red-900 dark:text-red-300" x-text="'-' + platformProduct.discountPercent + '%'"></span>
+              </div>
+              <div class="text-sm text-gray-500 dark:text-gray-400" x-text="platformProduct.platform"></div>
+            </div>
+          </template>
+          <template x-if="!platformProduct">
+            <div>
+              <span class="text-2xl font-bold text-gray-400">价格待定</span>
+            </div>
+          </template>
+        </div>
+
+        <!-- CTA Buttons -->
+        <div class="space-y-3 mb-8">
+          <a x-show="platformProduct && platformProduct.affiliateToken" :href="'/go/' + platformProduct.affiliateToken" target="_blank" rel="noopener sponsored" class="block w-full py-4 bg-indigo-600 text-white text-center rounded-xl font-bold text-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+            <i class="fas fa-shopping-cart"></i> 在 <span x-text="platformProduct.platform"></span> 购买
+          </a>
+          <a x-show="platformProduct && !platformProduct.affiliateToken && platformProduct.platformUrl" :href="platformProduct.platformUrl" target="_blank" rel="noopener sponsored" class="block w-full py-4 bg-gray-900 text-white text-center rounded-xl font-bold text-lg hover:bg-gray-800 transition flex items-center justify-center gap-2 dark:bg-gray-700 dark:hover:bg-gray-600">
+            <i class="fas fa-external-link-alt"></i> 在 <span x-text="platformProduct.platform"></span> 查看
+          </a>
+        </div>
+
+        <!-- Specs Table -->
+        <div x-show="product.specs" class="mb-6">
+          <h3 class="text-sm font-bold text-gray-700 mb-3 dark:text-gray-300">规格参数</h3>
+          <div class="bg-white rounded-lg border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+            <template x-for="(value, key) in product.specs" :key="key">
+              <div class="flex border-b border-gray-100 last:border-0 dark:border-gray-700">
+                <div class="w-1/3 px-4 py-3 text-sm text-gray-500 bg-gray-50 dark:bg-gray-700 dark:text-gray-400" x-text="key"></div>
+                <div class="w-2/3 px-4 py-3 text-sm text-gray-900 dark:text-gray-100" x-text="value"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email Subscription -->
+    <div x-show="product" class="mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100 dark:from-gray-800 dark:to-gray-700 dark:border-gray-600" x-data="{ email: '', submitted: false, submitting: false, error: '' }">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 class="font-bold text-gray-900 mb-1 dark:text-gray-100">📬 订阅降价提醒</h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400">留下邮箱，商品降价时第一时间通知你</p>
+        </div>
+        <div class="flex gap-2 w-full sm:w-auto">
+          <input x-model="email" type="email" placeholder="your@email.com" class="px-4 py-2 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm w-full sm:w-48 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" :disabled="submitted" />
+          <button @click="submitting = true; error = ''; fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }).then(r => r.json()).then(d => { if (d.success) { submitted = true; } else { error = d.error || '订阅失败'; } }).catch(e => error = '网络错误').finally(() => submitting = false)" :disabled="submitted || !email" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap text-sm">
+            <span x-show="!submitted && !submitting">订阅</span>
+            <span x-show="submitting"><i class="fas fa-spinner fa-spin"></i></span>
+            <span x-show="submitted">已订阅 ✓</span>
+          </button>
+        </div>
+      </div>
+      <p x-show="error" class="text-red-500 text-sm mt-2" x-text="error"></p>
+    </div>
+
+    <!-- Social Share Buttons -->
+    <div x-show="product" class="mb-8 flex items-center gap-3">
+      <span class="text-sm text-gray-500 font-medium dark:text-gray-400">分享:</span>
+      <a :href="'https://twitter.com/intent/tweet?text=' + encodeURIComponent(product.name) + '&url=' + encodeURIComponent(window.location.href)" target="_blank" rel="noopener" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition dark:bg-gray-700 dark:hover:bg-gray-600">
+        <i class="fab fa-x-twitter text-gray-700 dark:text-gray-300"></i>
+      </a>
+      <a :href="'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(window.location.href)" target="_blank" rel="noopener" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-blue-100 flex items-center justify-center transition dark:bg-gray-700">
+        <i class="fab fa-facebook-f text-blue-600"></i>
+      </a>
+      <a :href="'https://wa.me/?text=' + encodeURIComponent(product.name + ' ' + window.location.href)" target="_blank" rel="noopener" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-green-100 flex items-center justify-center transition dark:bg-gray-700">
+        <i class="fab fa-whatsapp text-green-600"></i>
+      </a>
+      <a :href="'https://t.me/share/url?url=' + encodeURIComponent(window.location.href) + '&text=' + encodeURIComponent(product.name)" target="_blank" rel="noopener" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-blue-50 flex items-center justify-center transition dark:bg-gray-700">
+        <i class="fab fa-telegram-plane text-blue-500"></i>
+      </a>
+      <button @click="navigator.clipboard.writeText(window.location.href).then(() => { copyFlash = true; setTimeout(() => copyFlash = false, 2000); })" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition relative dark:bg-gray-700 dark:hover:bg-gray-600">
+        <i class="fas fa-link text-gray-700 dark:text-gray-300"></i>
+        <span x-show="copyFlash" class="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">已复制!</span>
+      </button>
+    </div>
+
+    <!-- AI Generated Content -->
+    <div x-show="product.summary || product.pros || product.cons" class="mb-12 space-y-6">
+      <!-- Summary -->
+      <div x-show="product.summary" class="bg-white rounded-xl p-6 shadow-sm dark:bg-gray-800">
+        <h2 class="text-lg font-bold text-gray-900 mb-3 flex items-center dark:text-gray-100">
+          <span class="mr-2">📝</span> AI 商品摘要
+        </h2>
+        <p class="text-gray-700 leading-relaxed dark:text-gray-300" x-text="product.summary"></p>
+      </div>
+
+      <!-- Pros & Cons -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div x-show="product.pros && product.pros.length" class="bg-green-50 rounded-xl p-6 dark:bg-green-900/30">
+          <h2 class="text-lg font-bold text-green-800 mb-4 flex items-center dark:text-green-300">
+            <span class="mr-2">✅</span> 优点
+          </h2>
+          <ul class="space-y-2">
+            <template x-for="(pro, idx) in product.pros" :key="idx">
+              <li class="flex items-start gap-2 text-green-700 dark:text-green-300">
+                <i class="fas fa-check-circle mt-1 text-green-500 dark:text-green-400"></i>
+                <span x-text="pro"></span>
+              </li>
+            </template>
+          </ul>
+        </div>
+        <div x-show="product.cons && product.cons.length" class="bg-red-50 rounded-xl p-6 dark:bg-red-900/30">
+          <h2 class="text-lg font-bold text-red-800 mb-4 flex items-center dark:text-red-300">
+            <span class="mr-2">❌</span> 缺点
+          </h2>
+          <ul class="space-y-2">
+            <template x-for="(con, idx) in product.cons" :key="idx">
+              <li class="flex items-start gap-2 text-red-700 dark:text-red-300">
+                <i class="fas fa-times-circle mt-1 text-red-400"></i>
+                <span x-text="con"></span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+
+      <!-- FAQ -->
+      <div x-show="product.faq && product.faq.length" class="bg-white rounded-xl p-6 shadow-sm dark:bg-gray-800">
+        <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center dark:text-gray-100">
+          <span class="mr-2">❓</span> 常见问题
+        </h2>
+        <div class="space-y-4">
+          <template x-for="(item, idx) in product.faq" :key="idx">
+            <div class="border-b border-gray-100 last:border-0 pb-4 last:pb-0 dark:border-gray-700">
+              <h3 class="font-medium text-gray-900 mb-2 dark:text-gray-100" x-text="item.q"></h3>
+              <p class="text-gray-600 text-sm dark:text-gray-400" x-text="item.a"></p>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related Products -->
+    <div x-show="relatedProducts.length" class="mb-12">
+      <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center dark:text-gray-100">
+        <span class="mr-2">🔗</span> 相关推荐
+      </h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        <template x-for="rp in relatedProducts" :key="rp.id">
+          <a :href="'/product/' + rp.slug" class="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition dark:bg-gray-800">
+            <img :src="rp.thumbnailUrl || '/placeholder.png'" :alt="rp.name" class="w-full aspect-square object-cover" loading="lazy" />
+            <div class="p-3">
+              <div class="text-xs text-gray-400 mb-1 dark:text-gray-500" x-text="rp.brand"></div>
+              <h3 class="text-sm font-medium text-gray-900 line-clamp-2 mb-2 dark:text-gray-100" x-text="rp.name"></h3>
+              <div class="text-sm font-bold text-indigo-600 dark:text-indigo-400" x-text="rp.currentPrice ? formatPrice(rp.currentPrice) : ''"></div>
+            </div>
+          </a>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="border-t border-gray-800 pt-6 text-sm text-gray-500 mb-6">
+        <p><strong>联盟信息披露：</strong>本网站部分链接为联盟链接。我们可能会通过这些链接获得佣金，但这不会增加您的费用。详见我们的 <a href="/affiliate-disclosure" class="text-indigo-400 hover:underline">联盟信息披露</a>。</p>
+      </div>
+      <p>&copy; <span x-text="new Date().getFullYear()">2026</span> AI Shopping. AI驱动的全球商品推荐平台.</p>
+    </div>
+  </footer>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('productDetail', () => ({
+      loading: true,
+      error: false,
+      product: null,
+      platformProduct: null,
+      selectedImage: '',
+      relatedProducts: [],
+      copyFlash: false,
+      async init() {
+        const slug = window.location.pathname.split('/product/')[1];
+        if (!slug) { this.error = true; this.loading = false; return; }
+        await this.loadProduct(slug);
+      },
+      async loadProduct(slug) {
+        try {
+          const res = await fetch('/api/products/' + encodeURIComponent(slug));
+          if (!res.ok) { this.error = true; this.loading = false; return; }
+          const data = await res.json();
+          this.product = data.product;
+          if (data.platforms && data.platforms.length) {
+            this.platformProduct = data.platforms[0];
+            this.selectedImage = this.product.thumbnailUrl || '';
+          }
+          document.title = (this.product.name || '商品') + ' - AI Shopping';
+          if (this.product.categorySlug) {
+            const relatedRes = await fetch('/api/products?category=' + this.product.categorySlug + '&limit=4');
+            if (relatedRes.ok) {
+              const relatedData = await relatedRes.json();
+              this.relatedProducts = (relatedData.products || []).filter(p => p.id !== this.product.id).slice(0, 4);
+            }
+          }
+        } catch(e) { console.error(e); this.error = true; }
+        this.loading = false;
+      },
+      formatPrice(price, currency = 'USD') {
+        if (!price) return '';
+        return (currency === 'USD' ? '$' : currency + ' ') + parseFloat(price).toFixed(2);
+      }
+    }));
+  });
+  </script>
+</body>
+</html>
