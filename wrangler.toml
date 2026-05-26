@@ -3,6 +3,9 @@ main = "src/worker/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Pages deployment (static frontend)
+pages_build_output_dir = "dist"
+
 [vars]
 SITE_URL = "https://ai-shopping.pages.dev"
 SITE_TITLE = "AI Shopping"
@@ -23,11 +26,11 @@ id = "d9d116294afb4c0aa09ea59beb99e57c"
 
 [[kv_namespaces]]
 binding = "SEARCH_CACHE"
-id = "d9d116294afb4c0aa09ea59beb99e57c"
+id = "9f58ddc751a8486c9c0bfe438f196379"
 
 [[kv_namespaces]]
 binding = "PRODUCT_CACHE"
-id = "d9d116294afb4c0aa09ea59beb99e57c"
+id = "a18c0f0e41674ae48dc2d31db8a61ec2"
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
@@ -35,8 +38,8 @@ id = "d9d116294afb4c0aa09ea59beb99e57c"
 
 # R2 Bucket
 [[r2_buckets]]
-binding = "CONTENT_BUCKET"
-bucket_name = "ai-shopping-content"
+binding = "MEDIA_BUCKET"
+bucket_name = "aiseo"
 
 # Environment variables (set via wrangler secret)
 # TURNSTILE_SECRET_KEY
