@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自动恢复控制 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="recoveryController">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">🔄 自动恢复控制</h1>
+            <p class="text-gray-500 mt-1">自动恢复操作控制面板</p>
+          </div>
+          <div class="flex space-x-3">
+            <button @click="checkTriggers" :disabled="checkingTriggers" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition disabled:opacity-50">
+              <span x-show="!checkingTriggers">⚡ 检查触发器</span>
+              <span x-show="checkingTriggers">检查中...</span>
+            </button>
+            <button @click="loadOperations" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+          </div>
+        </div>
+
+        <!-- Trigger Conditions Config -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold flex items-center">
+              <span class="mr-2">⚡</span> 自动恢复触发条件
+            </h2>
+            <button @click="showConfigForm = !showConfigForm" class="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200">
+              <span x-show="!showConfigForm">编辑配置</span>
+              <span x-show="showConfigForm">收起</span>
+            </button>
+          </div>
+
+          <!-- Read-only display -->
+          <div x-show="!showConfigForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-gray-900">API 错误率</span>
+                <span class="text-xs px-2 py-0.5 rounded" :class="config.apiErrorRate.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="config.apiErrorRate.enabled ? '启用' : '禁用'"></span>
+              </div>
+              <div class="text-2xl font-bold text-red-600" x-text="config.apiErrorRate.threshold + '%'"></div>
+              <div class="text-xs text-gray-500 mt-1">超过此阈值触发熔断</div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-gray-900">队列积压</span>
+                <span class="text-xs px-2 py-0.5 rounded" :class="config.queueBacklog.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="config.queueBacklog.enabled ? '启用' : '禁用'"></span>
+              </div>
+              <div class="text-2xl font-bold text-yellow-600" x-text="config.queueBacklog.threshold"></div>
+              <div class="text-xs text-gray-500 mt-1">待处理任务数上限</div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-gray-900">GSC 下跌</span>
+                <span class="text-xs px-2 py-0.5 rounded" :class="config.gscDrop.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="config.gscDrop.enabled ? '启用' : '禁用'"></span>
+              </div>
+              <div class="text-2xl font-bold text-orange-600" x-text="config.gscDrop.threshold + '%'"></div>
+              <div class="text-xs text-gray-500 mt-1">周环比下跌触发</div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-gray-900">成本超预算</span>
+                <span class="text-xs px-2 py-0.5 rounded" :class="config.costOverrun.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="config.costOverrun.enabled ? '启用' : '禁用'"></span>
+              </div>
+              <div class="text-2xl font-bold text-purple-600" x-text="config.costOverrun.threshold + '%'"></div>
+              <div class="text-xs text-gray-500 mt-1">达到预算百分比</div>
+            </div>
+          </div>
+
+          <!-- Editable form -->
+          <div x-show="showConfigForm" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- API Error Rate Config -->
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="font-medium">API 错误率</span>
+                  <label class="flex items-center">
+                    <input type="checkbox" x-model="editConfig.apiErrorRate.enabled" class="mr-2" />
+                    <span class="text-sm" x-text="editConfig.apiErrorRate.enabled ? '启用' : '禁用'"></span>
+                  </label>
+                </div>
+                <div class="space-y-2">
+                  <div>
+                    <label class="text-xs text-gray-500">阈值 (%)</label>
+                    <input type="number" x-model="editConfig.apiErrorRate.threshold" min="1" max="100" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-500">窗口时间 (分钟)</label>
+                    <input type="number" x-model="editConfig.apiErrorRate.windowMinutes" min="1" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Queue Backlog Config -->
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="font-medium">队列积压</span>
+                  <label class="flex items-center">
+                    <input type="checkbox" x-model="editConfig.queueBacklog.enabled" class="mr-2" />
+                    <span class="text-sm" x-text="editConfig.queueBacklog.enabled ? '启用' : '禁用'"></span>
+                  </label>
+                </div>
+                <div class="space-y-2">
+                  <div>
+                    <label class="text-xs text-gray-500">阈值 (任务数)</label>
+                    <input type="number" x-model="editConfig.queueBacklog.threshold" min="1" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- GSC Drop Config -->
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="font-medium">GSC 下跌</span>
+                  <label class="flex items-center">
+                    <input type="checkbox" x-model="editConfig.gscDrop.enabled" class="mr-2" />
+                    <span class="text-sm" x-text="editConfig.gscDrop.enabled ? '启用' : '禁用'"></span>
+                  </label>
+                </div>
+                <div class="space-y-2">
+                  <div>
+                    <label class="text-xs text-gray-500">阈值 (%)</label>
+                    <input type="number" x-model="editConfig.gscDrop.threshold" min="1" max="100" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-500">窗口时间 (天)</label>
+                    <input type="number" x-model="editConfig.gscDrop.windowDays" min="1" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cost Overrun Config -->
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="font-medium">成本超预算</span>
+                  <label class="flex items-center">
+                    <input type="checkbox" x-model="editConfig.costOverrun.enabled" class="mr-2" />
+                    <span class="text-sm" x-text="editConfig.costOverrun.enabled ? '启用' : '禁用'"></span>
+                  </label>
+                </div>
+                <div class="space-y-2">
+                  <div>
+                    <label class="text-xs text-gray-500">阈值 (预算百分比%)</label>
+                    <input type="number" x-model="editConfig.costOverrun.threshold" min="1" max="100" class="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t">
+              <button @click="showConfigForm = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+              <button @click="saveConfig" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存配置</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Rollbacks -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📋</span> 待处理恢复操作
+            <span x-show="pendingOperations.length > 0" class="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs animate-pulse" x-text="pendingOperations.length"></span>
+          </h2>
+
+          <div class="space-y-4">
+            <template x-for="op in pendingOperations" :key="op.id">
+              <div class="border rounded-lg p-4 hover:bg-gray-50 transition">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-3 mb-2">
+                      <span class="px-2 py-1 text-xs rounded font-medium" :class="op.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'" x-text="op.status === 'pending' ? '待确认' : '已执行'"></span>
+                      <span class="font-medium text-gray-900" x-text="op.action"></span>
+                      <span class="text-sm text-gray-500">#<span x-text="op.targetId"></span></span>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                      操作ID: <span class="font-mono" x-text="op.operationId"></span>
+                    </div>
+                    <div class="text-sm text-gray-500 mt-1">
+                      创建时间: <span x-text="formatDateTime(op.createdAt)"></span>
+                      <span x-show="op.expiresAt" class="ml-2">过期: <span x-text="formatDateTime(op.expiresAt)"></span></span>
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button x-show="op.status === 'pending'" @click="confirmRollback(op.id)" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">确认回滚</button>
+                    <button x-show="op.status === 'pending'" @click="rejectRollback(op.id)" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">拒绝</button>
+                    <button @click="viewSnapshot(op)" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm">查看快照</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div x-show="pendingOperations.length === 0" class="text-center py-8 text-gray-500">
+              <span class="text-4xl mb-2 block">✅</span>
+              暂无待处理恢复操作
+            </div>
+          </div>
+        </div>
+
+        <!-- 24-Hour Rollback Window -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">⏪</span> 24小时回滚窗口
+            <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">可回滚</span>
+          </h2>
+          <p class="text-sm text-gray-500 mb-4">以下操作已在24小时内执行，可以一键回滚到操作前的状态</p>
+
+          <div class="space-y-4">
+            <template x-for="op in rollbackWindowOperations" :key="op.id">
+              <div class="border rounded-lg p-4 hover:bg-gray-50 transition">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-3 mb-2">
+                      <span class="px-2 py-1 text-xs rounded font-medium bg-blue-100 text-blue-800" x-text="'已执行'"></span>
+                      <span class="font-medium text-gray-900" x-text="op.action"></span>
+                      <span class="text-sm text-gray-500">#<span x-text="op.targetId"></span></span>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                      操作ID: <span class="font-mono" x-text="op.operationId"></span>
+                    </div>
+                    <div class="flex items-center space-x-4 mt-2">
+                      <div class="text-sm text-gray-500">
+                        执行时间: <span x-text="formatDateTime(op.appliedAt)"></span>
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        剩余窗口: <span class="font-medium text-orange-600" x-text="getRemainingTime(op.expiresAt)"></span>
+                      </div>
+                    </div>
+                    <div class="mt-2 flex items-center space-x-2">
+                      <span class="text-xs px-2 py-0.5 rounded" :class="getTimeRemainingClass(op.expiresAt)" x-text="getTimeRemainingLabel(op.expiresAt)"></span>
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button @click="quickRollback(op)" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm">
+                      一键回滚
+                    </button>
+                    <button @click="viewSnapshot(op)" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm">查看快照</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div x-show="rollbackWindowOperations.length === 0" class="text-center py-8 text-gray-500">
+              <span class="text-4xl mb-2 block">✅</span>
+              暂无在回滚窗口内的操作
+            </div>
+          </div>
+        </div>
+
+        <!-- Action History -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📜</span> 操作历史
+          </h2>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">目标</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作者</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="log in actionLogs" :key="log.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-500" x-text="formatDateTime(log.timestamp)"></td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 text-xs rounded" :class="log.action === 'rollback' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'" x-text="log.action"></span>
+                    </td>
+                    <td class="px-4 py-3 text-sm" x-text="log.targetType + ' #' + log.targetId"></td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 text-xs rounded" :class="log.result === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="log.result === 'success' ? '成功' : '失败'"></span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500" x-text="log.operator"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="actionLogs.length === 0" class="text-center py-8 text-gray-500">暂无历史记录</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Snapshot Detail Modal -->
+    <div x-show="showSnapshotModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">快照详情</h2>
+        <div x-show="selectedSnapshot">
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">操作</label>
+            <p class="font-medium" x-text="selectedSnapshot?.action"></p>
+          </div>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">目标</label>
+            <p x-text="selectedSnapshot?.targetType + ' #' + selectedSnapshot?.targetId"></p>
+          </div>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">快照数据</label>
+            <pre class="bg-gray-100 p-4 rounded text-xs overflow-auto max-h-60 font-mono" x-text="JSON.stringify(selectedSnapshot?.snapshotData, null, 2)"></pre>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6">
+          <button @click="showSnapshotModal = false" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('recoveryController', () => ({
+        pendingOperations: [],
+        rollbackWindowOperations: [],
+        actionLogs: [],
+        showSnapshotModal: false,
+        selectedSnapshot: null,
+        checkingTriggers: false,
+        lastTriggerCheck: null,
+        showConfigForm: false,
+        config: {
+          apiErrorRate: { enabled: true, threshold: 5, windowMinutes: 5 },
+          queueBacklog: { enabled: true, threshold: 50 },
+          gscDrop: { enabled: true, threshold: 20, windowDays: 7 },
+          costOverrun: { enabled: true, threshold: 90 }
+        },
+        editConfig: {
+          apiErrorRate: { enabled: true, threshold: 5, windowMinutes: 5 },
+          queueBacklog: { enabled: true, threshold: 50 },
+          gscDrop: { enabled: true, threshold: 20, windowDays: 7 },
+          costOverrun: { enabled: true, threshold: 90 }
+        },
+
+        async init() {
+          await this.loadOperations();
+          setInterval(() => this.loadOperations(), 30000);
+        },
+
+        async loadOperations() {
+          try {
+            const res = await fetch('/api/dashboard/operations');
+            if (res.ok) {
+              const data = await res.json();
+              const allOps = data.data || [];
+
+              // Separate pending and applied operations
+              this.pendingOperations = allOps.filter(op => op.status === 'pending');
+
+              // Filter for rollback window (applied but not expired)
+              const now = Date.now();
+              this.rollbackWindowOperations = allOps.filter(op => {
+                if (op.status !== 'applied') return false;
+                if (!op.expiresAt) return false;
+                const expiresAtMs = new Date(op.expiresAt).getTime();
+                return expiresAtMs > now; // Not yet expired
+              }).map(op => ({
+                ...op,
+                remainingMs: new Date(op.expiresAt).getTime() - now
+              }));
+            }
+          } catch (e) { console.error('Failed to load operations:', e); }
+
+          // Load action logs from API
+          try {
+            const logsRes = await fetch('/api/dashboard/recovery/logs?limit=50');
+            if (logsRes.ok) {
+              const logsData = await logsRes.json();
+              this.actionLogs = logsData.logs || [];
+            }
+          } catch (e) { console.error('Failed to load logs:', e); }
+
+          // Load config
+          try {
+            const configRes = await fetch('/api/dashboard/recovery/config');
+            if (configRes.ok) {
+              const configData = await configRes.json();
+              this.config = configData.config || this.config;
+            }
+          } catch (e) { console.error('Failed to load config:', e); }
+        },
+
+        async confirmRollback(id) {
+          if (!confirm('确定要执行此回滚操作吗？')) return;
+          try {
+            await fetch(`/api/dashboard/operations/${id}/rollback`, { method: 'POST' });
+            await this.loadOperations();
+          } catch (e) { console.error('Failed to rollback:', e); }
+        },
+
+        async rejectRollback(id) {
+          try {
+            await fetch(`/api/dashboard/operations/${id}/reject`, { method: 'POST' });
+            await this.loadOperations();
+          } catch (e) { console.error('Failed to reject:', e); }
+        },
+
+        async quickRollback(op) {
+          if (!confirm(`确定要回滚操作 "${op.action}" 吗？此操作将在24小时窗口内执行。`)) return;
+          try {
+            await fetch(`/api/dashboard/operations/${op.id}/rollback`, { method: 'POST' });
+            await this.loadOperations();
+          } catch (e) {
+            console.error('Failed to rollback:', e);
+            alert('回滚失败');
+          }
+        },
+
+        viewSnapshot(op) {
+          this.selectedSnapshot = op;
+          this.showSnapshotModal = true;
+        },
+
+        formatDateTime(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleString('zh-CN');
+        },
+
+        getRemainingTime(expiresAt) {
+          if (!expiresAt) return '未知';
+          const remaining = new Date(expiresAt).getTime() - Date.now();
+          if (remaining <= 0) return '已过期';
+
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+
+          if (hours > 0) {
+            return `${hours}小时${minutes}分钟`;
+          }
+          return `${minutes}分钟`;
+        },
+
+        getTimeRemainingLabel(expiresAt) {
+          if (!expiresAt) return '';
+          const remaining = new Date(expiresAt).getTime() - Date.now();
+          if (remaining <= 0) return '已过期';
+          if (remaining > 12 * 60 * 60 * 1000) return '窗口充足';
+          if (remaining > 6 * 60 * 60 * 1000) return '注意窗口';
+          return '尽快回滚';
+        },
+
+        getTimeRemainingClass(expiresAt) {
+          if (!expiresAt) return '';
+          const remaining = new Date(expiresAt).getTime() - Date.now();
+          if (remaining <= 0) return 'bg-red-100 text-red-800';
+          if (remaining > 12 * 60 * 60 * 1000) return 'bg-green-100 text-green-800';
+          if (remaining > 6 * 60 * 60 * 1000) return 'bg-yellow-100 text-yellow-800';
+          return 'bg-orange-100 text-orange-800';
+        },
+
+        async checkTriggers() {
+          this.checkingTriggers = true;
+          try {
+            const res = await fetch('/api/dashboard/recovery/check-triggers', { method: 'POST' });
+            if (res.ok) {
+              const data = await res.json();
+              this.lastTriggerCheck = new Date().toISOString();
+              alert(`检查完成！触发事件: ${data.events.length}, 执行恢复: ${data.executedRecovery}`);
+              await this.loadOperations();
+            }
+          } catch (e) {
+            console.error('Failed to check triggers:', e);
+            alert('检查触发器失败');
+          }
+          this.checkingTriggers = false;
+        },
+
+        async saveConfig() {
+          try {
+            const res = await fetch('/api/dashboard/recovery/config', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.editConfig)
+            });
+            if (res.ok) {
+              this.config = JSON.parse(JSON.stringify(this.editConfig));
+              this.showConfigForm = false;
+              alert('配置已保存');
+            } else {
+              alert('保存失败');
+            }
+          } catch (e) {
+            console.error('Failed to save config:', e);
+            alert('保存失败');
+          }
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

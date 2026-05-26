@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GA4 Analytics - AI SEO CMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="max-w-7xl mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">GA4 Analytics</h1>
+      <div class="flex gap-2">
+        <select id="dateRange" class="px-4 py-2 border rounded-lg">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button onclick="loadAnalytics()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-gray-500 text-sm">Total Pageviews</h3>
+        <p id="totalPageviews" class="text-3xl font-bold text-blue-600">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-gray-500 text-sm">Avg. Session Duration</h3>
+        <p id="avgSessionDuration" class="text-3xl font-bold text-green-600">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-gray-500 text-sm">Bounce Rate</h3>
+        <p id="bounceRate" class="text-3xl font-bold text-orange-600">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-gray-500 text-sm">Active Users</h3>
+        <p id="activeUsers" class="text-3xl font-bold text-purple-600">-</p>
+      </div>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4">Pageviews Trend</h2>
+      <canvas id="trendChart" height="100"></canvas>
+    </div>
+
+    <!-- Top Pages Table -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4">Top Pages</h2>
+      <table class="w-full">
+        <thead>
+          <tr class="text-left text-gray-500 text-sm">
+            <th class="pb-3">Page Path</th>
+            <th class="pb-3">Pageviews</th>
+            <th class="pb-3">Avg. Time</th>
+            <th class="pb-3">Bounce Rate</th>
+          </tr>
+        </thead>
+        <tbody id="topPagesTable">
+          <tr><td colspan="4" class="text-center text-gray-500 py-4">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Real-time Panel -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Real-time Active Users</h2>
+      <div id="realtimeUsers" class="text-4xl font-bold text-center py-8">-</div>
+      <p class="text-center text-gray-500 text-sm">Users currently on site</p>
+    </div>
+  </div>
+
+  <script>
+    let trendChart = null;
+
+    async function loadAnalytics() {
+      const days = parseInt(document.getElementById('dateRange').value);
+      try {
+        const res = await fetch(`/api/analytics/ga4?days=${days}`);
+        const data = await res.json();
+
+        // Update summary cards
+        document.getElementById('totalPageviews').textContent = formatNumber(data.pageviews);
+        document.getElementById('avgSessionDuration').textContent = formatDuration(data.avgSessionDuration);
+        document.getElementById('bounceRate').textContent = data.bounceRate ? `${data.bounceRate}%` : '-';
+        document.getElementById('activeUsers').textContent = formatNumber(data.activeUsers);
+
+        // Update trend chart
+        updateTrendChart(data.dailyTrends);
+
+        // Update top pages table
+        updateTopPagesTable(data.topPages);
+
+        // Update real-time
+        document.getElementById('realtimeUsers').textContent = formatNumber(data.realtimeUsers);
+      } catch (error) {
+        console.error('Failed to load analytics:', error);
+        alert('Failed to load analytics data');
+      }
+    }
+
+    function formatNumber(num) {
+      if (!num) return '0';
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toString();
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds) return '-';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}m ${secs}s`;
+    }
+
+    function updateTrendChart(dailyTrends) {
+      const ctx = document.getElementById('trendChart').getContext('2d');
+
+      const labels = dailyTrends?.map(d => d.date) || [];
+      const values = dailyTrends?.map(d => d.pageviews) || [];
+
+      if (trendChart) {
+        trendChart.destroy();
+      }
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Pageviews',
+            data: values,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function updateTopPagesTable(pages) {
+      const tbody = document.getElementById('topPagesTable');
+      if (!pages || pages.length === 0) {
+        tbody.textContent = 'No data available';
+        return;
+      }
+
+      // Build table rows using DOM methods (XSS safe)
+      tbody.textContent = '';
+      pages.forEach(page => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-t';
+
+        const td1 = document.createElement('td');
+        td1.className = 'py-3';
+        td1.textContent = page.path;
+        tr.appendChild(td1);
+
+        const td2 = document.createElement('td');
+        td2.className = 'py-3';
+        td2.textContent = formatNumber(page.pageviews);
+        tr.appendChild(td2);
+
+        const td3 = document.createElement('td');
+        td3.className = 'py-3';
+        td3.textContent = formatDuration(page.avgTime);
+        tr.appendChild(td3);
+
+        const td4 = document.createElement('td');
+        td4.className = 'py-3';
+        td4.textContent = page.bounceRate ? page.bounceRate + '%' : '-';
+        tr.appendChild(td4);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Load on page load
+    loadAnalytics();
+
+    // Auto-refresh every 5 minutes
+    setInterval(loadAnalytics, 5 * 60 * 1000);
+  </script>
+</body>
+</html>

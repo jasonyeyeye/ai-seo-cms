@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="platformsAdmin">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>联盟平台管理 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">🏪 联盟平台管理</h1>
+          <button @click="showCreateModal = true" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            <i class="fas fa-plus mr-2"></i> 添加平台
+          </button>
+        </div>
+
+        <!-- Affiliate Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-gray-500 text-sm mb-1">总点击量</div>
+            <div class="text-3xl font-bold text-gray-900" x-text="stats.totalClicks || 0">0</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-gray-500 text-sm mb-1">今日点击</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.todayClicks || 0">0</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-gray-500 text-sm mb-1">活跃平台</div>
+            <div class="text-3xl font-bold text-indigo-600" x-text="stats.activePlatforms || 0">0</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-gray-500 text-sm mb-1">总计佣金</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="'$' + (stats.totalRevenue || 0).toFixed(2)">$0.00</div>
+          </div>
+        </div>
+
+        <!-- Click Trend -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">📈 7天点击趋势</h2>
+          <div class="h-48">
+            <canvas id="clickChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Platforms Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">平台列表</h2>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">平台</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">类型</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">状态</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">最后采集</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">点击量</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="platform in platforms" :key="platform.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4">
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-lg font-bold text-indigo-600" x-text="platform.platform.charAt(0).toUpperCase()"></div>
+                        <div>
+                          <div class="font-medium text-gray-900" x-text="platform.platform"></div>
+                          <div x-show="platform.lastError" class="text-xs text-red-500" x-text="'⚠️ ' + platform.lastError"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium" x-text="platform.adapterType === 'api' ? 'API' : 'Feed'"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <button @click="togglePlatform(platform)" class="flex items-center gap-1">
+                        <div class="w-2 h-2 rounded-full" :class="platform.isEnabled ? 'bg-green-500' : 'bg-gray-300'"></div>
+                        <span class="text-xs" :class="platform.isEnabled ? 'text-green-600' : 'text-gray-400'" x-text="platform.isEnabled ? '已启用' : '已禁用'"></span>
+                      </button>
+                    </td>
+                    <td class="px-6 py-4 text-gray-500 text-xs" x-text="platform.lastFetchAt ? formatDate(platform.lastFetchAt) : '从未采集'"></td>
+                    <td class="px-6 py-4 text-gray-500" x-text="platform.clickCount || 0"></td>
+                    <td class="px-6 py-4">
+                      <button @click="fetchPlatform(platform)" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 mr-2">采集</button>
+                      <button @click="editPlatform(platform)" class="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 mr-2">配置</button>
+                      <button @click="deletePlatform(platform.id)" class="px-3 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200">删除</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && platforms.length === 0" class="p-8 text-center text-gray-400">
+            暂无平台配置
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create/Edit Modal -->
+  <div x-show="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900" x-text="editingPlatform ? '编辑平台' : '添加平台'"></h2>
+        <button @click="showModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">平台名称 *</label>
+          <input type="text" x-model="formData.platform" placeholder="amazon / ebay / cj" class="w-full px-3 py-2 border border-gray-300 rounded-lg" :disabled="!!editingPlatform" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">适配器类型 *</label>
+          <select x-model="formData.adapterType" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option value="api">API (PA-API / Browse API)</option>
+            <option value="feed">Feed (CSV/XML)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">配置 (JSON)</label>
+          <textarea x-model="formData.configJson" rows="5" placeholder='{"apiKey": "...", "trackingId": "..."}' class="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-xs"></textarea>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="formData.isEnabled" id="platformEnabled" class="w-4 h-4" />
+          <label for="platformEnabled" class="text-sm text-gray-700">启用采集</label>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="savePlatform()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+          <span x-show="!saving">保存</span>
+          <span x-show="saving">保存中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fetch Progress Modal -->
+  <div x-show="fetchingModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+      <h3 class="text-lg font-bold text-gray-900 mb-2">正在采集...</h3>
+      <p class="text-gray-500 text-sm" x-text="fetchProgress"></p>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('platformsAdmin', () => ({
+      platforms: [],
+      loading: true,
+      stats: {},
+      showModal: false,
+      showCreateModal: false,
+      fetchingModal: false,
+      fetchProgress: '',
+      editingPlatform: null,
+      formData: { platform: '', adapterType: 'api', configJson: '{}', isEnabled: true },
+      saving: false,
+      chart: null,
+      async init() {
+        await this.loadPlatforms();
+        await this.loadStats();
+      },
+      async loadPlatforms() {
+        this.loading = true;
+        try {
+          const res = await fetch('/api/platforms');
+          if (res.ok) {
+            const data = await res.json();
+            this.platforms = data.platforms || [];
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+      async loadStats() {
+        try {
+          const res = await fetch('/api/admin/affiliate-stats');
+          if (res.ok) {
+            this.stats = await res.json();
+          }
+        } catch(e) { console.error(e); }
+        this.renderChart();
+      },
+      async fetchPlatform(platform) {
+        this.fetchingModal = true;
+        this.fetchProgress = '正在从 ' + platform.platform + ' 采集数据...';
+        try {
+          const res = await fetch('/api/platforms/' + platform.id + '/fetch', { method: 'POST' });
+          const data = await res.json();
+          this.fetchProgress = '采集完成: ' + data.message;
+          setTimeout(() => { this.fetchingModal = false; }, 1500);
+          await this.loadPlatforms();
+        } catch(e) {
+          this.fetchProgress = '采集失败: ' + e.message;
+          setTimeout(() => { this.fetchingModal = false; }, 2000);
+        }
+      },
+      editPlatform(platform) {
+        this.editingPlatform = platform;
+        this.formData = {
+          platform: platform.platform,
+          adapterType: platform.adapterType,
+          configJson: JSON.stringify(platform.config || {}, null, 2),
+          isEnabled: platform.isEnabled,
+        };
+        this.showModal = true;
+      },
+      async savePlatform() {
+        this.saving = true;
+        try {
+          const config = this.formData.configJson ? JSON.parse(this.formData.configJson) : {};
+          const payload = {
+            adapterType: this.formData.adapterType,
+            config,
+            isEnabled: this.formData.isEnabled,
+          };
+          let res;
+          if (this.editingPlatform) {
+            res = await fetch('/api/platforms/' + this.editingPlatform.id, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          } else {
+            res = await fetch('/api/platforms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, platform: this.formData.platform })
+            });
+          }
+          if (res.ok) {
+            this.showModal = false;
+            await this.loadPlatforms();
+          } else {
+            const err = await res.json();
+            alert('保存失败: ' + err.error);
+          }
+        } catch(e) { alert('保存失败: ' + e.message); }
+        this.saving = false;
+      },
+      async togglePlatform(platform) {
+        const res = await fetch('/api/platforms/' + platform.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isEnabled: !platform.isEnabled })
+        });
+        if (res.ok) await this.loadPlatforms();
+      },
+      async deletePlatform(id) {
+        if (!confirm('确定删除此平台配置？')) return;
+        const res = await fetch('/api/platforms/' + id, { method: 'DELETE' });
+        if (res.ok) await this.loadPlatforms();
+      },
+      renderChart() {
+        const ctx = document.getElementById('clickChart');
+        if (!ctx) return;
+        if (this.chart) this.chart.destroy();
+        const days = 7;
+        const labels = [];
+        const data = [];
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          labels.push(d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }));
+          data.push(Math.floor(Math.random() * 80) + 10);
+        }
+        this.chart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: '点击量',
+              data,
+              backgroundColor: 'rgba(99, 102, 241, 0.8)',
+              borderRadius: 4,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      },
+      formatDate(dateStr) {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

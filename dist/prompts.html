@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt 模板 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="promptsAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">📋 Prompt 模板</h1>
+          <button @click="showCreateForm = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 新建模板</button>
+        </div>
+
+        <!-- Create Form Modal -->
+        <div x-show="showCreateForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6">新建 Prompt 模板</h2>
+            <form @submit.prevent="createPrompt" class="space-y-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">名称 *</label>
+                <input type="text" x-model="newPrompt.name" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="模板名称" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">描述</label>
+                <input type="text" x-model="newPrompt.description" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="简短描述" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">System Prompt *</label>
+                <textarea x-model="newPrompt.systemPrompt" rows="10" required class="w-full px-4 py-2 border rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="你是一个专业的SEO内容写作者..."></textarea>
+              </div>
+              <div class="flex items-center">
+                <input type="checkbox" x-model="newPrompt.isActive" id="isActiveNew" class="w-4 h-4 text-blue-600 rounded">
+                <label for="isActiveNew" class="ml-2 text-sm text-gray-700">启用此模板</label>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button type="button" @click="showCreateForm = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">创建</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <template x-for="prompt in prompts" :key="prompt.id">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="flex items-start justify-between mb-4">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900" x-text="prompt.name"></h3>
+                  <p class="text-sm text-gray-500" x-text="prompt.description || '无描述'"></p>
+                  <div class="flex items-center mt-2 space-x-2">
+                    <span class="text-xs px-2 py-1 rounded" :class="prompt.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="prompt.isActive ? '启用' : '禁用'"></span>
+                    <span class="text-xs text-gray-400" x-text="'v' + (prompt.version || 1)"></span>
+                    <span class="text-xs text-gray-400" x-text="'ID: ' + prompt.id.substring(0, 8) + '...'"></span>
+                  </div>
+                </div>
+                <div class="flex space-x-2">
+                  <button @click="toggleActive(prompt.id)" class="text-blue-600 hover:underline text-sm" x-text="prompt.isActive ? '禁用' : '启用'"></button>
+                  <button @click="toggleEdit(prompt.id)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                  <button @click="showVersions(prompt.id)" class="text-purple-600 hover:underline text-sm">版本</button>
+                  <button @click="deletePrompt(prompt.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-500">System Prompt</label>
+                  <div class="mt-1 p-3 bg-gray-50 rounded text-sm font-mono max-h-32 overflow-y-auto whitespace-pre-wrap" x-text="prompt.systemPrompt"></div>
+                </div>
+
+                <div x-show="editingId === prompt.id" class="space-y-4 pt-4 border-t">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">名称</label>
+                    <input type="text" x-model="editForm.name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">描述</label>
+                    <input type="text" x-model="editForm.description" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">System Prompt</label>
+                    <textarea x-model="editForm.systemPrompt" rows="6" class="w-full px-4 py-2 border rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="checkbox" x-model="editForm.isActive" id="isActiveEdit" class="w-4 h-4 text-blue-600 rounded">
+                    <label for="isActiveEdit" class="ml-2 text-sm text-gray-700">启用</label>
+                  </div>
+                  <div class="flex justify-end space-x-3">
+                    <button @click="cancelEdit" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                    <button @click="savePrompt(prompt.id)" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div x-show="loading" class="text-center py-8 text-gray-500">加载中...</div>
+          <div x-show="!loading && prompts.length === 0" class="text-center py-8 text-gray-500">暂无模板，点击上方按钮创建</div>
+
+        <!-- Version History Modal -->
+        <div x-show="showVersionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-xl p-8 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6">版本历史 - <span x-text="versionPromptName"></span></h2>
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-gray-700 mb-2">灰度发布百分比: <span x-text="rolloutPercent + '%'"></span></label>
+              <input type="range" min="0" max="100" step="10" x-model="rolloutPercent" class="w-full" />
+              <div class="flex justify-between text-xs text-gray-400 mt-1">
+                <span>0%</span><span>50%</span><span>100%</span>
+              </div>
+              <button @click="updateRollout" class="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">更新灰度</button>
+            </div>
+            <div class="mb-4 flex justify-between">
+              <div class="flex space-x-2">
+                <button @click="showCreateVersionForm = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ 新建版本</button>
+                <button @click="toggleDiffMode" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700" x-text="diffMode ? '关闭对比' : '版本对比'"></button>
+              </div>
+              <div x-show="diffMode" class="flex items-center space-x-2">
+                <select x-model="diffV1" class="border rounded px-2 py-1 text-sm">
+                  <template x-for="ver in versions" :key="ver.id">
+                    <option :value="ver.version" x-text="'v' + ver.version"></option>
+                  </template>
+                </select>
+                <span class="text-gray-500">vs</span>
+                <select x-model="diffV2" class="border rounded px-2 py-1 text-sm">
+                  <template x-for="ver in versions" :key="ver.id">
+                    <option :value="ver.version" x-text="'v' + ver.version"></option>
+                  </template>
+                </select>
+                <button @click="loadDiff" class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700">对比</button>
+              </div>
+            </div>
+
+            <!-- Diff View -->
+            <div x-show="diffMode && diffResult" class="mb-6 p-4 bg-gray-50 rounded-lg">
+              <h3 class="font-semibold mb-3">版本对比: v<span x-text="diffResult.v1.version"></span> vs v<span x-text="diffResult.v2.version"></span></h3>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="text-sm">
+                  <span class="font-medium text-red-600">删除 (v<span x-text="diffResult.v1.version"></span>)</span>
+                  <span class="text-gray-400 ml-2" x-text="new Date(diffResult.v1.createdAt).toLocaleString()"></span>
+                </div>
+                <div class="text-sm">
+                  <span class="font-medium text-green-600">添加 (v<span x-text="diffResult.v2.version"></span>)</span>
+                  <span class="text-gray-400 ml-2" x-text="new Date(diffResult.v2.createdAt).toLocaleString()"></span>
+                </div>
+              </div>
+              <div class="font-mono text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
+                <template x-for="(line, idx) in diffResult.diff" :key="idx">
+                  <div class="px-2 py-0.5" :class="{
+                    'bg-red-50 text-red-700': line.type === 'removed',
+                    'bg-green-50 text-green-700': line.type === 'added',
+                    'bg-gray-100 text-gray-600': line.type === 'unchanged'
+                  }">
+                    <span x-show="line.type === 'removed'" class="text-red-500 mr-2">-</span>
+                    <span x-show="line.type === 'added'" class="text-green-500 mr-2">+</span>
+                    <span x-show="line.type === 'unchanged'" class="text-gray-400 mr-2"> </span>
+                    <span x-text="line.value"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div x-show="!diffMode || !diffResult" class="space-y-4">
+              <template x-for="ver in versions" :key="ver.id">
+                <div class="border rounded-lg p-4" :class="ver.version === currentVersion ? 'border-green-500 bg-green-50' : 'border-gray-200'">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <div class="flex items-center space-x-2">
+                        <span class="font-semibold" x-text="'v' + ver.version"></span>
+                        <span class="text-xs px-2 py-1 rounded" :class="ver.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="ver.isActive ? '启用' : '禁用'"></span>
+                        <span x-show="ver.version === currentVersion" class="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">当前</span>
+                      </div>
+                      <p class="text-sm text-gray-500 mt-1" x-text="'创建于: ' + new Date(ver.createdAt).toLocaleString()"></p>
+                      <p class="text-sm text-gray-400 mt-1" x-text="ver.description || ''"></p>
+                    </div>
+                    <div class="flex space-x-2">
+                      <button @click="prepareDiff(ver)" class="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200">对比</button>
+                      <button @click="confirmRollback(ver)" class="px-3 py-1 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200">回滚至此</button>
+                    </div>
+                  </div>
+                  <div class="mt-2 p-2 bg-gray-50 rounded text-sm font-mono max-h-24 overflow-y-auto whitespace-pre-wrap" x-text="ver.systemPrompt"></div>
+                </div>
+              </template>
+              <div x-show="versions.length === 0" class="text-center py-4 text-gray-500">暂无版本历史</div>
+            </div>
+
+            <!-- Rollback Confirmation Modal -->
+            <div x-show="showRollbackConfirm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+              <div class="bg-white rounded-xl p-6 w-full max-w-md">
+                <h3 class="text-lg font-bold mb-4">确认回滚</h3>
+                <p class="text-gray-600 mb-4">确定要回滚到版本 <span class="font-semibold" x-text="'v' + rollbackTargetVersion"></span> 吗？</p>
+                <p class="text-sm text-gray-500 mb-4">系统将自动创建一个新版本保存当前内容，以便您可以随时恢复。</p>
+                <div class="flex items-center mb-4">
+                  <input type="checkbox" x-model="rollbackConfirmed" id="rollbackConfirmCheck" class="w-4 h-4 text-blue-600 rounded">
+                  <label for="rollbackConfirmCheck" class="ml-2 text-sm text-gray-700">我确认此操作</label>
+                </div>
+                <div class="flex justify-end space-x-3">
+                  <button @click="showRollbackConfirm = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                  <button @click="executeRollback" :disabled="!rollbackConfirmed" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed">确认回滚</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end mt-6">
+              <button @click="showVersionModal = false; diffMode = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">关闭</button>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('promptsAdmin', () => ({
+        prompts: [],
+        loading: true,
+        editingId: null,
+        showCreateForm: false,
+        showVersionModal: false,
+        showCreateVersionForm: false,
+        showRollbackConfirm: false,
+        versionPromptId: null,
+        versionPromptName: '',
+        currentVersion: null,
+        versions: [],
+        rolloutPercent: 100,
+        newVersion: { systemPrompt: '', isActive: true },
+        editForm: { name: '', description: '', systemPrompt: '', isActive: true },
+        newPrompt: { name: '', description: '', systemPrompt: '', isActive: true },
+        diffMode: false,
+        diffV1: null,
+        diffV2: null,
+        diffResult: null,
+        rollbackTargetVersion: null,
+        rollbackTargetId: null,
+        rollbackConfirmed: false,
+
+        async init() {
+          await this.loadPrompts();
+        },
+
+        async loadPrompts() {
+          this.loading = true;
+          try {
+            const res = await fetch('/api/prompts');
+            this.prompts = await res.json();
+          } catch (e) { console.error('Failed to load prompts:', e); }
+          finally { this.loading = false; }
+        },
+
+        async createPrompt() {
+          try {
+            const res = await fetch('/api/prompts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newPrompt)
+            });
+            if (res.ok) {
+              this.showCreateForm = false;
+              this.newPrompt = { name: '', description: '', systemPrompt: '', isActive: true };
+              await this.loadPrompts();
+            }
+          } catch (e) { console.error('Failed to create prompt:', e); alert('创建失败'); }
+        },
+
+        toggleEdit(id) {
+          if (this.editingId === id) {
+            this.cancelEdit();
+          } else {
+            const prompt = this.prompts.find(p => p.id === id);
+            if (prompt) {
+              this.editingId = id;
+              this.editForm = { name: prompt.name, description: prompt.description || '', systemPrompt: prompt.systemPrompt, isActive: prompt.isActive };
+            }
+          }
+        },
+
+        async toggleActive(id) {
+          try {
+            await fetch(`/api/prompts/${id}/toggle`, { method: 'PATCH' });
+            await this.loadPrompts();
+          } catch (e) { console.error('Failed to toggle prompt:', e); alert('操作失败'); }
+        },
+
+        cancelEdit() {
+          this.editingId = null;
+          this.editForm = { name: '', description: '', systemPrompt: '', isActive: true };
+        },
+
+        async savePrompt(id) {
+          try {
+            await fetch(`/api/prompts/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.editForm)
+            });
+            await this.loadPrompts();
+            this.cancelEdit();
+          } catch (e) { console.error('Failed to save prompt:', e); alert('保存失败'); }
+        },
+
+        async deletePrompt(id) {
+          if (!confirm('确定要删除这个模板吗？')) return;
+          try {
+            await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
+            await this.loadPrompts();
+          } catch (e) { console.error('Failed to delete prompt:', e); }
+        },
+
+        async showVersions(id) {
+          const prompt = this.prompts.find(p => p.id === id);
+          if (!prompt) return;
+          this.versionPromptId = id;
+          this.versionPromptName = prompt.name;
+          this.currentVersion = prompt.version;
+          this.rolloutPercent = prompt.rolloutPercent || 100;
+          this.diffMode = false;
+          this.diffResult = null;
+          try {
+            const res = await fetch(`/api/prompts/${id}/versions`);
+            const data = await res.json();
+            this.versions = data.versions || [];
+            if (this.versions.length > 0) {
+              this.diffV1 = this.versions[0].version;
+              this.diffV2 = this.versions.length > 1 ? this.versions[1].version : this.versions[0].version;
+            }
+          } catch (e) { console.error('Failed to load versions:', e); }
+          this.showVersionModal = true;
+          this.showCreateVersionForm = false;
+          this.showRollbackConfirm = false;
+        },
+
+        toggleDiffMode() {
+          this.diffMode = !this.diffMode;
+          if (this.diffMode && !this.diffResult && this.versions.length >= 2) {
+            this.loadDiff();
+          }
+        },
+
+        async loadDiff() {
+          if (!this.diffV1 || !this.diffV2) return;
+          try {
+            const res = await fetch(`/api/prompts/${this.versionPromptId}/diff/${this.diffV1}/${this.diffV2}`);
+            this.diffResult = await res.json();
+          } catch (e) { console.error('Failed to load diff:', e); }
+        },
+
+        prepareDiff(ver) {
+          this.diffMode = true;
+          if (this.versions.length >= 2) {
+            const otherVersions = this.versions.filter(v => v.version !== ver.version);
+            if (otherVersions.length > 0) {
+              this.diffV1 = ver.version;
+              this.diffV2 = otherVersions[0].version;
+              this.loadDiff();
+            }
+          }
+        },
+
+        confirmRollback(ver) {
+          this.rollbackTargetVersion = ver.version;
+          this.rollbackTargetId = ver.id;
+          this.rollbackConfirmed = false;
+          this.showRollbackConfirm = true;
+        },
+
+        async executeRollback() {
+          if (!this.rollbackConfirmed || !this.rollbackTargetId) return;
+          try {
+            const res = await fetch(`/api/prompts/${this.versionPromptId}/rollback/${this.rollbackTargetId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ confirm: true })
+            });
+            if (res.ok) {
+              this.showRollbackConfirm = false;
+              await this.loadPrompts();
+              await this.showVersions(this.versionPromptId);
+            }
+          } catch (e) { console.error('Failed to rollback:', e); alert('回滚失败'); }
+        },
+
+        async createNewVersion() {
+          if (!this.newVersion.systemPrompt) {
+            alert('请输入 System Prompt');
+            return;
+          }
+          try {
+            const res = await fetch(`/api/prompts/${this.versionPromptId}/versions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newVersion)
+            });
+            if (res.ok) {
+              this.showCreateVersionForm = false;
+              this.newVersion = { systemPrompt: '', isActive: true };
+              await this.loadPrompts();
+              await this.showVersions(this.versionPromptId);
+            }
+          } catch (e) { console.error('Failed to create version:', e); alert('创建版本失败'); }
+        },
+
+        async rollback(versionId) {
+          if (!confirm('确定要回滚到此版本吗？这将创建一个新版本保留当前内容。')) return;
+          try {
+            const res = await fetch(`/api/prompts/${this.versionPromptId}/rollback/${versionId}`, { method: 'POST' });
+            if (res.ok) {
+              await this.loadPrompts();
+              await this.showVersions(this.versionPromptId);
+            }
+          } catch (e) { console.error('Failed to rollback:', e); alert('回滚失败'); }
+        },
+
+        async updateRollout() {
+          try {
+            const res = await fetch(`/api/prompts/${this.versionPromptId}/rollout`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rolloutPercent: this.rolloutPercent })
+            });
+            if (res.ok) {
+              await this.loadPrompts();
+              alert('灰度发布已更新');
+            }
+          } catch (e) { console.error('Failed to update rollout:', e); alert('更新失败'); }
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

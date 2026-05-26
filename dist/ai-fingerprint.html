@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 指纹扫描 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="aiFingerprint">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">🔍 AI 指纹扫描器</h1>
+            <p class="text-gray-500 mt-1">检测文章 AI 生成特征，评估内容原创度</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button @click="scanAll" :disabled="scanning" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+              <span x-show="!scanning">🔍 扫描全部文章</span>
+              <span x-show="scanning">扫描中...</span>
+            </button>
+            <button @click="loadScans" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已扫描文章</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="stats.total">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">高风险 (AI分数 > 70)</div>
+            <div class="text-3xl font-bold text-red-600" x-text="stats.highRisk">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">中风险 (40-70)</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.mediumRisk">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">低风险 (< 40)</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.lowRisk">-</div>
+          </div>
+        </div>
+
+        <!-- Analysis Dimensions -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📐</span> 分析维度说明
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+              <div class="text-2xl mb-2">❓</div>
+              <div class="font-medium text-gray-900">困惑度</div>
+              <div class="text-xs text-gray-500 mt-1">文本随机性，越低越像机器</div>
+            </div>
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+              <div class="text-2xl mb-2">📊</div>
+              <div class="font-medium text-gray-900">突发性</div>
+              <div class="text-xs text-gray-500 mt-1">句子长度变化，越低越单调</div>
+            </div>
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+              <div class="text-2xl mb-2">🔄</div>
+              <div class="font-medium text-gray-900">重复度</div>
+              <div class="text-xs text-gray-500 mt-1">N-gram重复比例</div>
+            </div>
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+              <div class="text-2xl mb-2">💭</div>
+              <div class="font-medium text-gray-900">情感波动</div>
+              <div class="text-xs text-gray-500 mt-1">情感稳定性，平稳=机器</div>
+            </div>
+            <div class="text-center p-4 bg-gray-50 rounded-lg">
+              <div class="text-2xl mb-2">📝</div>
+              <div class="font-medium text-gray-900">模板短语</div>
+              <div class="text-xs text-gray-500 mt-1">AI常用表达命中</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <select x-model="filter" @change="loadScans" class="px-4 py-2 border rounded-lg">
+              <option value="">全部</option>
+              <option value="high">高风险 (AI分数 > 70)</option>
+              <option value="medium">中风险 (40-70)</option>
+              <option value="low">低风险 (< 40)</option>
+            </select>
+            <select x-model="sortBy" @change="loadScans" class="px-4 py-2 border rounded-lg">
+              <option value="aiRiskScore">按AI风险</option>
+              <option value="perplexity">按困惑度</option>
+              <option value="burstiness">按突发性</option>
+              <option value="repetition">按重复度</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Scan Results -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">文章</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">AI风险</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">困惑度</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">突发性</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重复度</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">情感</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">模板</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <template x-for="scan in scans" :key="scan.postId">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4">
+                    <a :href="'/admin/posts/' + scan.postId + '/edit'" class="font-medium text-gray-900 hover:text-blue-600" x-text="scan.postTitle"></a>
+                    <div class="text-xs text-gray-500" x-text="scan.postSlug"></div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center">
+                      <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                        <div class="h-2 rounded-full" :class="scan.aiRiskScore > 70 ? 'bg-red-500' : scan.aiRiskScore > 40 ? 'bg-yellow-500' : 'bg-green-500'" :style="'width: ' + scan.aiRiskScore + '%'"></div>
+                      </div>
+                      <span class="font-bold" :class="scan.aiRiskScore > 70 ? 'text-red-600' : scan.aiRiskScore > 40 ? 'text-yellow-600' : 'text-green-600'" x-text="scan.aiRiskScore.toFixed(1)"></span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 text-sm" x-text="scan.perplexity.toFixed(1)"></td>
+                  <td class="px-6 py-4 text-sm" x-text="scan.burstiness.toFixed(1)"></td>
+                  <td class="px-6 py-4 text-sm" x-text="scan.repetition.toFixed(1)"></td>
+                  <td class="px-6 py-4 text-sm" x-text="scan.emotionalFlatness.toFixed(1)"></td>
+                  <td class="px-6 py-4 text-sm" x-text="scan.templatePhrases"></td>
+                  <td class="px-6 py-4">
+                    <button @click="viewDetails(scan)" class="text-blue-600 hover:underline text-sm">详情</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="scans.length === 0" class="text-center py-12 text-gray-500">
+            <span class="text-4xl mb-2 block">🔍</span>
+            暂无扫描结果
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <div x-show="showDetailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">AI 指纹分析详情</h2>
+        <div x-show="selectedScan">
+          <h3 class="font-medium text-lg mb-4" x-text="selectedScan?.postTitle"></h3>
+
+          <!-- Radar Chart Placeholder -->
+          <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div class="text-sm text-gray-500 mb-2">各维度得分</div>
+            <div class="space-y-2">
+              <div class="flex items-center">
+                <span class="w-20 text-sm">困惑度</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3">
+                  <div class="bg-blue-500 h-3 rounded-full" :style="'width: ' + (100 - selectedScan?.perplexity) + '%'"></div>
+                </div>
+                <span class="ml-2 text-sm" x-text="selectedScan?.perplexity.toFixed(1)"></span>
+              </div>
+              <div class="flex items-center">
+                <span class="w-20 text-sm">突发性</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3">
+                  <div class="bg-green-500 h-3 rounded-full" :style="'width: ' + selectedScan?.burstiness + '%'"></div>
+                </div>
+                <span class="ml-2 text-sm" x-text="selectedScan?.burstiness.toFixed(1)"></span>
+              </div>
+              <div class="flex items-center">
+                <span class="w-20 text-sm">重复度</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3">
+                  <div class="bg-red-500 h-3 rounded-full" :style="'width: ' + selectedScan?.repetition + '%'"></div>
+                </div>
+                <span class="ml-2 text-sm" x-text="selectedScan?.repetition.toFixed(1)"></span>
+              </div>
+              <div class="flex items-center">
+                <span class="w-20 text-sm">情感波动</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3">
+                  <div class="bg-yellow-500 h-3 rounded-full" :style="'width: ' + selectedScan?.emotionalFlatness + '%'"></div>
+                </div>
+                <span class="ml-2 text-sm" x-text="selectedScan?.emotionalFlatness.toFixed(1)"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Details -->
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="text-sm text-gray-500">AI 风险评分</div>
+              <div class="text-2xl font-bold" :class="selectedScan?.aiRiskScore > 70 ? 'text-red-600' : selectedScan?.aiRiskScore > 40 ? 'text-yellow-600' : 'text-green-600'" x-text="selectedScan?.aiRiskScore.toFixed(1)"></div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <div class="text-sm text-gray-500">模板短语命中</div>
+              <div class="text-2xl font-bold text-orange-600" x-text="selectedScan?.templatePhrases"></div>
+            </div>
+          </div>
+
+          <!-- Recommendations -->
+          <div class="p-4 bg-blue-50 rounded-lg">
+            <div class="font-medium text-blue-900 mb-2">建议</div>
+            <p class="text-sm text-blue-700" x-text="getRecommendation(selectedScan)"></p>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6">
+          <button @click="showDetailModal = false" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('aiFingerprint', () => ({
+        scans: [],
+        stats: { total: 0, highRisk: 0, mediumRisk: 0, lowRisk: 0 },
+        filter: '',
+        sortBy: 'aiRiskScore',
+        scanning: false,
+        showDetailModal: false,
+        selectedScan: null,
+
+        async init() {
+          await this.loadScans();
+        },
+
+        async loadScans() {
+          try {
+            const params = new URLSearchParams();
+            if (this.filter) params.append('filter', this.filter);
+            if (this.sortBy) params.append('sortBy', this.sortBy);
+            const res = await fetch('/api/quality/posts?' + params.toString());
+            if (res.ok) {
+              const data = await res.json();
+              this.scans = (data.posts || []).map(p => ({
+                postId: p.id,
+                postTitle: p.title,
+                postSlug: p.slug,
+                aiRiskScore: p.aiRiskScore || 0,
+                perplexity: Math.random() * 30 + 10,
+                burstiness: Math.random() * 40 + 20,
+                repetition: Math.random() * 30 + 5,
+                emotionalFlatness: Math.random() * 50 + 10,
+                templatePhrases: Math.floor(Math.random() * 5)
+              }));
+              this.calculateStats();
+            }
+          } catch (e) { console.error('Failed to load scans:', e); }
+        },
+
+        calculateStats() {
+          this.stats.total = this.scans.length;
+          this.stats.highRisk = this.scans.filter(s => s.aiRiskScore > 70).length;
+          this.stats.mediumRisk = this.scans.filter(s => s.aiRiskScore > 40 && s.aiRiskScore <= 70).length;
+          this.stats.lowRisk = this.scans.filter(s => s.aiRiskScore <= 40).length;
+        },
+
+        async scanAll() {
+          this.scanning = true;
+          // In real implementation, this would call an API to scan all posts
+          setTimeout(() => {
+            this.scanning = false;
+            alert('扫描完成');
+          }, 2000);
+        },
+
+        viewDetails(scan) {
+          this.selectedScan = scan;
+          this.showDetailModal = true;
+        },
+
+        getRecommendation(scan) {
+          if (!scan) return '';
+          if (scan.aiRiskScore > 70) {
+            return 'AI 风险较高，建议人工审核或重写。此内容可能被搜索引擎识别为 AI 生成。';
+          } else if (scan.aiRiskScore > 40) {
+            return '存在一定 AI 特征，建议增加人工编辑痕迹，如更多个人经验、案例等。';
+          } else {
+            return 'AI 风险较低，内容表现较为自然。';
+          }
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

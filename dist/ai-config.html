@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 配置 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="aiConfig">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">🤖 AI 配置</h1>
+
+        <!-- Tabs -->
+        <div class="flex space-x-4 mb-6 border-b">
+          <button @click="activeTab = 'providers'" :class="activeTab === 'providers' ? 'border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'" class="pb-2 px-4 border-b-2 font-medium">模型供应商</button>
+          <button @click="activeTab = 'models'" :class="activeTab === 'models' ? 'border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'" class="pb-2 px-4 border-b-2 font-medium">模型列表</button>
+        </div>
+
+        <!-- Providers Tab -->
+        <div x-show="activeTab === 'providers'">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold">AI 供应商</h2>
+            <button @click="showProviderForm = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 添加供应商</button>
+          </div>
+
+          <!-- Quick Add Presets -->
+          <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4 flex items-center"><span class="mr-2">🚀</span> 快速添加全球主流平台</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <template x-for="preset in providerPresets" :key="preset.id">
+                <button @click="quickAddProvider(preset)" class="p-3 border rounded-lg hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-semibold text-gray-900 group-hover:text-blue-600" x-text="preset.name"></span>
+                    <span x-show="preset.flag" x-text="preset.flag"></span>
+                  </div>
+                  <div class="text-xs text-gray-500" x-text="preset.region"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Add Provider Form -->
+          <div x-show="showProviderForm" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4">添加供应商</h3>
+            <form @submit.prevent="createProvider" class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">供应商 ID *</label>
+                  <input type="text" x-model="newProvider.id" required placeholder="openai" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                  <p class="text-xs text-gray-500 mt-1">唯一标识，如 openai, anthropic, google</p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">显示名称 *</label>
+                  <input type="text" x-model="newProvider.name" required placeholder="OpenAI" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">API Base URL *</label>
+                  <input type="url" x-model="newProvider.baseUrl" required placeholder="https://api.openai.com/v1" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">API Key 环境变量名 *</label>
+                  <input type="text" x-model="newProvider.apiKeyEnvVar" required placeholder="OPENAI_API_KEY" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                  <p class="text-xs text-gray-500 mt-1">系统会从此环境变量读取 API Key</p>
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">地区标识</label>
+                <input type="text" x-model="newProvider.region" placeholder="如: 🌎 全球, 🇨🇳 中国" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="flex items-center">
+                <input type="checkbox" x-model="newProvider.isEnabled" id="providerEnabled" class="w-4 h-4 text-blue-600 rounded">
+                <label for="providerEnabled" class="ml-2 text-sm text-gray-700">启用此供应商</label>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button type="button" @click="showProviderForm = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">添加</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Providers List -->
+          <div class="space-y-4">
+            <template x-for="provider in providers" :key="provider.id">
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                      <span x-text="provider.name"></span>
+                      <span class="ml-2 text-xs px-2 py-1 rounded" :class="provider.isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="provider.isEnabled ? '启用' : '禁用'"></span>
+                    </h3>
+                    <p class="text-sm text-gray-500 font-mono mt-1" x-text="provider.id"></p>
+                    <p class="text-xs text-gray-400 mt-1" x-text="provider.baseUrl"></p>
+                    <p class="text-xs text-gray-400 mt-1">API Key 环境变量: <span class="font-mono" x-text="provider.apiKeyEnvVar"></span></p>
+                    <div x-show="provider.region" class="mt-1">
+                      <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600" x-text="provider.region"></span>
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button @click="showModelPresetsFor(provider)" class="text-green-600 hover:underline text-sm">+ 批量添加模型</button>
+                    <button @click="toggleEditProvider(provider.id)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                    <button @click="deleteProvider(provider.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                  </div>
+                </div>
+
+                <!-- Edit Form -->
+                <div x-show="editingProviderId === provider.id" class="mt-4 pt-4 border-t">
+                  <form @submit.prevent="saveProvider(provider.id)" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">显示名称</label>
+                        <input type="text" x-model="editProvider.name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Base URL</label>
+                        <input type="url" x-model="editProvider.baseUrl" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key 环境变量名</label>
+                        <input type="text" x-model="editProvider.apiKeyEnvVar" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">地区标识</label>
+                        <input type="text" x-model="editProvider.region" placeholder="如: 🌎 全球, 🇨🇳 中国" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center">
+                        <input type="checkbox" x-model="editProvider.isEnabled" id="editProviderEnabled" class="w-4 h-4 text-blue-600 rounded">
+                        <label for="editProviderEnabled" class="ml-2 text-sm text-gray-700">启用</label>
+                      </div>
+                      <div class="flex space-x-3">
+                        <button type="button" @click="cancelEditProvider" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </template>
+            <div x-show="providers.length === 0" class="text-center py-8 text-gray-500 bg-white rounded-xl shadow-sm">暂无供应商配置</div>
+          </div>
+        </div>
+
+        <!-- Model Presets Modal -->
+        <div x-show="showModelPresetsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-2" x-text="'批量添加模型 - ' + (selectedProviderForPresets?.name || '')"></h2>
+            <p class="text-sm text-gray-500 mb-6">选择要添加的模型模板</p>
+            <div class="space-y-4 max-h-[60vh] overflow-y-auto">
+              <template x-for="preset in currentModelPresets" :key="preset.id">
+                <label class="flex items-start p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition">
+                  <input type="checkbox" :value="preset.id" x-model="selectedPresetModels" class="w-5 h-5 mt-0.5 text-blue-600 rounded">
+                  <div class="ml-3 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold" x-text="preset.name"></span>
+                      <span class="text-xs px-2 py-0.5 rounded" :class="modelTypeClass(preset.modelType)" x-text="preset.modelType"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 font-mono mt-1" x-text="preset.id"></div>
+                    <div class="flex items-center space-x-4 mt-2 text-xs text-gray-400">
+                      <span>上下文: <span x-text="(preset.contextWindow || 0).toLocaleString()"></span></span>
+                      <span>输入: $<span x-text="preset.inputCostPer1M || 0"></span>/1M</span>
+                      <span>输出: $<span x-text="preset.outputCostPer1M || 0"></span>/1M</span>
+                    </div>
+                    <div x-show="preset.description" class="text-xs text-gray-400 mt-1" x-text="preset.description"></div>
+                  </div>
+                </label>
+              </template>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+              <button type="button" @click="closeModelPresetsModal" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+              <button type="button" @click="batchAddModels" :disabled="selectedPresetModels.length === 0" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">添加 <span x-text="selectedPresetModels.length"></span> 个模型</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Models Tab -->
+        <div x-show="activeTab === 'models'">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold">模型列表</h2>
+            <button @click="showModelForm = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 添加模型</button>
+          </div>
+
+          <!-- Add Model Form -->
+          <div x-show="showModelForm" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4">添加模型</h3>
+            <form @submit.prevent="createModel" class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">模型 ID *</label>
+                  <input type="text" x-model="newModel.id" required placeholder="gpt-4o" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">所属供应商 *</label>
+                  <select x-model="newModel.providerId" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">选择供应商</option>
+                    <template x-for="p in providers" :key="p.id">
+                      <option :value="p.id" x-text="p.name + ' (' + p.id + ')'"></option>
+                    </template>
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">显示名称 *</label>
+                  <input type="text" x-model="newModel.name" required placeholder="GPT-4o" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">类型</label>
+                  <select x-model="newModel.modelType" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="chat">Chat</option>
+                    <option value="embedding">Embedding</option>
+                    <option value="vision">Vision</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">上下文窗口</label>
+                  <input type="number" x-model="newModel.contextWindow" placeholder="128000" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">输入价格 ($/1M tokens)</label>
+                  <input type="number" step="0.01" x-model="newModel.inputCostPer1M" placeholder="0.00" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">输出价格 ($/1M tokens)</label>
+                  <input type="number" step="0.01" x-model="newModel.outputCostPer1M" placeholder="0.00" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div class="flex items-center space-x-6">
+                <div class="flex items-center">
+                  <input type="checkbox" x-model="newModel.isEnabled" id="modelEnabled" class="w-4 h-4 text-blue-600 rounded">
+                  <label for="modelEnabled" class="ml-2 text-sm text-gray-700">启用</label>
+                </div>
+                <div class="flex items-center">
+                  <input type="checkbox" x-model="newModel.isDefault" id="modelDefault" class="w-4 h-4 text-blue-600 rounded">
+                  <label for="modelDefault" class="ml-2 text-sm text-gray-700">设为默认模型</label>
+                </div>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button type="button" @click="showModelForm = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">添加</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Models List -->
+          <div class="space-y-4">
+            <template x-for="model in models" :key="model.id">
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                      <span x-text="model.name"></span>
+                      <span class="ml-2 text-xs px-2 py-1 rounded" :class="model.isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="model.isEnabled ? '启用' : '禁用'"></span>
+                      <span x-show="model.isDefault" class="ml-1 text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">默认</span>
+                    </h3>
+                    <p class="text-sm text-gray-500 font-mono mt-1" x-text="model.id"></p>
+                    <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                      <span>供应商: <span x-text="getProviderName(model.providerId)"></span></span>
+                      <span>类型: <span x-text="model.modelType"></span></span>
+                      <span>上下文: <span x-text="(model.contextWindow || 0).toLocaleString()"></span></span>
+                    </div>
+                    <div class="flex items-center space-x-4 mt-1 text-xs text-gray-400">
+                      <span>输入: $<span x-text="model.inputCostPer1M || 0"></span>/1M</span>
+                      <span>输出: $<span x-text="model.outputCostPer1M || 0"></span>/1M</span>
+                    </div>
+                  </div>
+                  <div class="flex space-x-2">
+                    <button @click="toggleEditModel(model.id)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                    <button @click="deleteModel(model.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                  </div>
+                </div>
+
+                <!-- Edit Form -->
+                <div x-show="editingModelId === model.id" class="mt-4 pt-4 border-t">
+                  <form @submit.prevent="saveModel(model.id)" class="space-y-4">
+                    <div class="grid grid-cols-3 gap-4">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">显示名称</label>
+                        <input type="text" x-model="editModel.name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">上下文窗口</label>
+                        <input type="number" x-model="editModel.contextWindow" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">类型</label>
+                        <select x-model="editModel.modelType" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="chat">Chat</option>
+                          <option value="embedding">Embedding</option>
+                          <option value="vision">Vision</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">输入价格 ($/1M)</label>
+                        <input type="number" step="0.01" x-model="editModel.inputCostPer1M" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">输出价格 ($/1M)</label>
+                        <input type="number" step="0.01" x-model="editModel.outputCostPer1M" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-6">
+                        <div class="flex items-center">
+                          <input type="checkbox" x-model="editModel.isEnabled" class="w-4 h-4 text-blue-600 rounded">
+                          <label class="ml-2 text-sm text-gray-700">启用</label>
+                        </div>
+                        <div class="flex items-center">
+                          <input type="checkbox" x-model="editModel.isDefault" class="w-4 h-4 text-blue-600 rounded">
+                          <label class="ml-2 text-sm text-gray-700">默认模型</label>
+                        </div>
+                      </div>
+                      <div class="flex space-x-3">
+                        <button type="button" @click="cancelEditModel" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </template>
+            <div x-show="models.length === 0" class="text-center py-8 text-gray-500 bg-white rounded-xl shadow-sm">暂无模型配置</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('aiConfig', () => ({
+        activeTab: 'providers',
+        providers: [],
+        models: [],
+        loading: true,
+        showProviderForm: false,
+        showModelForm: false,
+        editingProviderId: null,
+        editingModelId: null,
+        newProvider: { id: '', name: '', baseUrl: '', apiKeyEnvVar: '', isEnabled: true },
+        newModel: { id: '', providerId: '', name: '', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, isEnabled: true, isDefault: false },
+        editProvider: { name: '', baseUrl: '', apiKeyEnvVar: '', isEnabled: true, region: '' },
+        editModel: { name: '', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, isEnabled: true, isDefault: false },
+        showModelPresetsModal: false,
+        selectedProviderForPresets: null,
+        currentModelPresets: [],
+        selectedPresetModels: [],
+        providerPresets: [
+          { id: 'openai', name: 'OpenAI', region: '🌎 全球', baseUrl: 'https://api.openai.com/v1', apiKeyEnvVar: 'OPENAI_API_KEY' },
+          { id: 'anthropic', name: 'Anthropic', region: '🌎 全球', baseUrl: 'https://api.anthropic.com/v1', apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+          { id: 'google', name: 'Google AI', region: '🌎 全球', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', apiKeyEnvVar: 'GOOGLE_API_KEY' },
+          { id: 'meta', name: 'Meta AI', region: '🌎 全球', baseUrl: 'https://api.meta.ai/v1', apiKeyEnvVar: 'META_API_KEY' },
+          { id: 'mistral', name: 'Mistral AI', region: '🌎 全球', baseUrl: 'https://api.mistral.ai/v1', apiKeyEnvVar: 'MISTRAL_API_KEY' },
+          { id: 'groq', name: 'Groq', region: '🌎 全球', baseUrl: 'https://api.groq.com/openai/v1', apiKeyEnvVar: 'GROQ_API_KEY' },
+          { id: 'deepseek', name: 'DeepSeek', region: '🇨🇳 中国', baseUrl: 'https://api.deepseek.com/v1', apiKeyEnvVar: 'DEEPSEEK_API_KEY' },
+          { id: 'zhipuai', name: '智谱 AI', region: '🇨🇳 中国', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKeyEnvVar: 'ZHIPUAI_API_KEY' },
+          { id: 'dashscope', name: '阿里云通义', region: '🇨🇳 中国', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKeyEnvVar: 'DASHSCOPE_API_KEY' },
+          { id: 'baidu', name: '百度文心', region: '🇨🇳 中国', baseUrl: 'https://qianfan.baidubce.com/v2', apiKeyEnvVar: 'BAIDU_API_KEY' },
+          { id: 'tencent', name: '腾讯混元', region: '🇨🇳 中国', baseUrl: 'https://hunyuan.cloud.tencent.com/v3', apiKeyEnvVar: 'TENCENT_API_KEY' },
+          { id: 'minimax', name: 'MiniMax', region: '🇨🇳 中国', baseUrl: 'https://api.minimax.chat/v1', apiKeyEnvVar: 'MINIMAX_API_KEY' },
+        ],
+        modelPresets: {
+          openai: [
+            { id: 'gpt-4o', name: 'GPT-4o', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 5, outputCostPer1M: 15, description: '最新最强模型' },
+            { id: 'gpt-4o-mini', name: 'GPT-4o Mini', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.15, outputCostPer1M: 0.6, description: '轻量快速' },
+            { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 10, outputCostPer1M: 30, description: '高性能' },
+            { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', modelType: 'chat', contextWindow: 16385, inputCostPer1M: 0.5, outputCostPer1M: 1.5, description: '经济实惠' },
+            { id: 'gpt-4', name: 'GPT-4', modelType: 'chat', contextWindow: 8192, inputCostPer1M: 30, outputCostPer1M: 60, description: '旗舰模型' },
+            { id: 'o1-preview', name: 'o1 Preview', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 15, outputCostPer1M: 60, description: '推理模型' },
+            { id: 'o1-mini', name: 'o1 Mini', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 3, outputCostPer1M: 12, description: '快速推理' },
+            { id: 'text-embedding-3-large', name: 'Embedding 3 Large', modelType: 'embedding', contextWindow: 8192, inputCostPer1M: 0.13, outputCostPer1M: 0, description: '高精度嵌入' },
+            { id: 'text-embedding-3-small', name: 'Embedding 3 Small', modelType: 'embedding', contextWindow: 8192, inputCostPer1M: 0.02, outputCostPer1M: 0, description: '轻量嵌入' },
+            { id: 'dall-e-3', name: 'DALL-E 3', modelType: 'image', contextWindow: 128, inputCostPer1M: 0, outputCostPer1M: 0, description: '图像生成' },
+          ],
+          anthropic: [
+            { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 3, outputCostPer1M: 15, description: '最新旗舰' },
+            { id: 'claude-opus-4-7', name: 'Claude Opus 4', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 15, outputCostPer1M: 75, description: '最强大模型' },
+            { id: 'claude-haiku-4-5', name: 'Claude Haiku 4', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 0.8, outputCostPer1M: 4, description: '快速轻量' },
+            { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 3, outputCostPer1M: 15, description: '高性价比' },
+            { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 0.8, outputCostPer1M: 4, description: '极速响应' },
+            { id: 'claude-3-opus', name: 'Claude 3 Opus', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 15, outputCostPer1M: 75, description: '旗舰模型' },
+          ],
+          google: [
+            { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', modelType: 'chat', contextWindow: 1000000, inputCostPer1M: 0, outputCostPer1M: 0, description: '免费高速' },
+            { id: 'gemini-2.0-flash-thinking', name: 'Gemini 2.0 Flash Thinking', modelType: 'chat', contextWindow: 1000000, inputCostPer1M: 0, outputCostPer1M: 0, description: '推理思考' },
+            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', modelType: 'chat', contextWindow: 2000000, inputCostPer1M: 1.25, outputCostPer1M: 5, description: '超大上下文' },
+            { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', modelType: 'chat', contextWindow: 1000000, inputCostPer1M: 0.075, outputCostPer1M: 0.3, description: '高性价比' },
+            { id: 'gemini-embedding-exp', name: 'Gemini Embedding', modelType: 'embedding', contextWindow: 8192, inputCostPer1M: 0.15, outputCostPer1M: 0, description: '文本嵌入' },
+          ],
+          meta: [
+            { id: 'meta-llama/Llama-4-Maverick', name: 'Llama 4 Maverick', modelType: 'chat', contextWindow: 100000, inputCostPer1M: 0, outputCostPer1M: 0, description: '开源主力' },
+            { id: 'meta-llama/Llama-4-Reasoner', name: 'Llama 4 Reasoner', modelType: 'chat', contextWindow: 100000, inputCostPer1M: 0, outputCostPer1M: 0, description: '推理模型' },
+            { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, description: '开源大杯' },
+            { id: 'meta-llama/Llama-3.2-11B-Vision-Instruct', name: 'Llama 3.2 11B Vision', modelType: 'vision', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, description: '视觉模型' },
+          ],
+          mistral: [
+            { id: 'mistral-large-latest', name: 'Mistral Large', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 2, outputCostPer1M: 6, description: '旗舰模型' },
+            { id: 'mistral-small-latest', name: 'Mistral Small', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.15, outputCostPer1M: 0.6, description: '轻量模型' },
+            { id: 'codestral-latest', name: 'Codestral', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.15, outputCostPer1M: 0.6, description: '代码专家' },
+            { id: 'open-mistral-7b', name: 'Mistral 7B', modelType: 'chat', contextWindow: 32000, inputCostPer1M: 0, outputCostPer1M: 0, description: '开源基础' },
+          ],
+          groq: [
+            { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.59, outputCostPer1M: 0.79, description: '极速推理' },
+            { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.05, outputCostPer1M: 0.08, description: '超低延迟' },
+            { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', modelType: 'chat', contextWindow: 32768, inputCostPer1M: 0.24, outputCostPer1M: 0.24, description: '混合专家' },
+          ],
+          deepseek: [
+            { id: 'deepseek-chat', name: 'DeepSeek V3', modelType: 'chat', contextWindow: 640000, inputCostPer1M: 0.27, outputCostPer1M: 1.1, description: '最新主力' },
+            { id: 'deepseek-coder', name: 'DeepSeek Coder', modelType: 'chat', contextWindow: 640000, inputCostPer1M: 0.14, outputCostPer1M: 0.28, description: '代码专家' },
+            { id: 'deepseek-reasoner', name: 'DeepSeek R1', modelType: 'chat', contextWindow: 640000, inputCostPer1M: 0.55, outputCostPer1M: 2.19, description: '推理模型' },
+          ],
+          zhipuai: [
+            { id: 'glm-4-flash', name: 'GLM-4 Flash', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.1, outputCostPer1M: 0.1, description: '快速响应' },
+            { id: 'glm-4', name: 'GLM-4', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 1, outputCostPer1M: 1, description: '旗舰模型' },
+            { id: 'glm-4-plus', name: 'GLM-4 Plus', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.1, outputCostPer1M: 0.1, description: '高配版' },
+            { id: 'glm-z1-flash', name: 'GLM-Z1 Flash', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.1, outputCostPer1M: 0.1, description: '推理加速' },
+          ],
+          dashscope: [
+            { id: 'qwen-plus', name: '通义千问 Plus', modelType: 'chat', contextWindow: 131072, inputCostPer1M: 0.6, outputCostPer1M: 0.6, description: '主力模型' },
+            { id: 'qwen-turbo', name: '通义千问 Turbo', modelType: 'chat', contextWindow: 131072, inputCostPer1M: 0.3, outputCostPer1M: 0.6, description: '快速版' },
+            { id: 'qwen-max', name: '通义千问 Max', modelType: 'chat', contextWindow: 131072, inputCostPer1M: 1.2, outputCostPer1M: 2.4, description: '旗舰模型' },
+            { id: 'qwen-vl-plus', name: '通义千问 VL Plus', modelType: 'vision', contextWindow: 32768, inputCostPer1M: 0.6, outputCostPer1M: 0.6, description: '视觉理解' },
+          ],
+          baidu: [
+            { id: 'ernie-4.0-8k', name: '文心 4.0 8K', modelType: 'chat', contextWindow: 8192, inputCostPer1M: 20, outputCostPer1M: 40, description: '旗舰模型' },
+            { id: 'ernie-3.5-8k', name: '文心 3.5 8K', modelType: 'chat', contextWindow: 8192, inputCostPer1M: 2, outputCostPer1M: 2, description: '主力模型' },
+            { id: 'ernie-speed-128k', name: 'ERNIE Speed 128K', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.8, outputCostPer1M: 2, description: '长上下文' },
+          ],
+          tencent: [
+            { id: 'hunyuan-pro', name: '混元 Pro', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 1, outputCostPer1M: 5, description: '旗舰模型' },
+            { id: 'hunyuan-standard', name: '混元 Standard', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.6, outputCostPer1M: 0.9, description: '标准版' },
+            { id: 'hunyuan-lite', name: '混元 Lite', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0.3, outputCostPer1M: 0.6, description: '轻量版' },
+          ],
+          minimax: [
+            { id: 'abab6-200k', name: 'ABAB 6 200K', modelType: 'chat', contextWindow: 200000, inputCostPer1M: 0.1, outputCostPer1M: 0.1, description: '长上下文' },
+            { id: 'abab6-chat', name: 'ABAB 6 Chat', modelType: 'chat', contextWindow: 32000, inputCostPer1M: 0.1, outputCostPer1M: 0.1, description: '通用对话' },
+          ],
+        },
+
+        async init() {
+          await Promise.all([this.loadProviders(), this.loadModels()]);
+          this.loading = false;
+        },
+
+        async loadProviders() {
+          try {
+            const res = await fetch('/api/ai-providers');
+            this.providers = await res.json();
+          } catch (e) { console.error('Failed to load providers:', e); }
+        },
+
+        async loadModels() {
+          try {
+            const res = await fetch('/api/ai-models');
+            this.models = await res.json();
+          } catch (e) { console.error('Failed to load models:', e); }
+        },
+
+        getProviderName(providerId) {
+          const p = this.providers.find(p => p.id === providerId);
+          return p ? p.name : providerId;
+        },
+
+        async createProvider() {
+          try {
+            const res = await fetch('/api/ai-providers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newProvider)
+            });
+            if (res.ok) {
+              this.showProviderForm = false;
+              this.newProvider = { id: '', name: '', baseUrl: '', apiKeyEnvVar: '', isEnabled: true };
+              await this.loadProviders();
+            }
+          } catch (e) { console.error('Failed to create provider:', e); alert('创建失败'); }
+        },
+
+        toggleEditProvider(id) {
+          if (this.editingProviderId === id) {
+            this.cancelEditProvider();
+          } else {
+            const p = this.providers.find(p => p.id === id);
+            if (p) {
+              this.editingProviderId = id;
+              this.editProvider = { name: p.name, baseUrl: p.baseUrl, apiKeyEnvVar: p.apiKeyEnvVar, isEnabled: p.isEnabled };
+            }
+          }
+        },
+
+        cancelEditProvider() {
+          this.editingProviderId = null;
+          this.editProvider = { name: '', baseUrl: '', apiKeyEnvVar: '', isEnabled: true };
+        },
+
+        async saveProvider(id) {
+          try {
+            await fetch(`/api/ai-providers/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.editProvider)
+            });
+            await this.loadProviders();
+            this.cancelEditProvider();
+          } catch (e) { console.error('Failed to save provider:', e); alert('保存失败'); }
+        },
+
+        async deleteProvider(id) {
+          if (!confirm('确定要删除此供应商吗？相关模型也会被删除。')) return;
+          try {
+            await fetch(`/api/ai-providers/${id}`, { method: 'DELETE' });
+            await Promise.all([this.loadProviders(), this.loadModels()]);
+          } catch (e) { console.error('Failed to delete provider:', e); }
+        },
+
+        async createModel() {
+          try {
+            const res = await fetch('/api/ai-models', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newModel)
+            });
+            if (res.ok) {
+              this.showModelForm = false;
+              this.newModel = { id: '', providerId: '', name: '', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, isEnabled: true, isDefault: false };
+              await this.loadModels();
+            }
+          } catch (e) { console.error('Failed to create model:', e); alert('创建失败'); }
+        },
+
+        toggleEditModel(id) {
+          if (this.editingModelId === id) {
+            this.cancelEditModel();
+          } else {
+            const m = this.models.find(m => m.id === id);
+            if (m) {
+              this.editingModelId = id;
+              this.editModel = { name: m.name, modelType: m.modelType, contextWindow: m.contextWindow, inputCostPer1M: m.inputCostPer1M, outputCostPer1M: m.outputCostPer1M, isEnabled: m.isEnabled, isDefault: m.isDefault };
+            }
+          }
+        },
+
+        cancelEditModel() {
+          this.editingModelId = null;
+          this.editModel = { name: '', modelType: 'chat', contextWindow: 128000, inputCostPer1M: 0, outputCostPer1M: 0, isEnabled: true, isDefault: false };
+        },
+
+        async saveModel(id) {
+          try {
+            await fetch(`/api/ai-models/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.editModel)
+            });
+            await this.loadModels();
+            this.cancelEditModel();
+          } catch (e) { console.error('Failed to save model:', e); alert('保存失败'); }
+        },
+
+        async deleteModel(id) {
+          if (!confirm('确定要删除此模型吗？')) return;
+          try {
+            await fetch(`/api/ai-models/${id}`, { method: 'DELETE' });
+            await this.loadModels();
+          } catch (e) { console.error('Failed to delete model:', e); }
+        },
+
+        quickAddProvider(preset) {
+          const exists = this.providers.find(p => p.id === preset.id);
+          if (exists) {
+            alert('此供应商已存在');
+            return;
+          }
+          this.newProvider = {
+            id: preset.id,
+            name: preset.name,
+            baseUrl: preset.baseUrl,
+            apiKeyEnvVar: preset.apiKeyEnvVar,
+            isEnabled: true,
+            region: preset.region
+          };
+          this.showProviderForm = true;
+        },
+
+        showModelPresetsFor(provider) {
+          this.selectedProviderForPresets = provider;
+          this.currentModelPresets = this.modelPresets[provider.id] || [];
+          this.selectedPresetModels = [];
+          this.showModelPresetsModal = true;
+        },
+
+        closeModelPresetsModal() {
+          this.showModelPresetsModal = false;
+          this.selectedProviderForPresets = null;
+          this.currentModelPresets = [];
+          this.selectedPresetModels = [];
+        },
+
+        async batchAddModels() {
+          if (!this.selectedProviderForPresets || this.selectedPresetModels.length === 0) return;
+          const presetModels = this.currentModelPresets.filter(m => this.selectedPresetModels.includes(m.id));
+          try {
+            for (const preset of presetModels) {
+              await fetch('/api/ai-models', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: preset.id,
+                  providerId: this.selectedProviderForPresets.id,
+                  name: preset.name,
+                  modelType: preset.modelType,
+                  contextWindow: preset.contextWindow,
+                  inputCostPer1M: preset.inputCostPer1M,
+                  outputCostPer1M: preset.outputCostPer1M,
+                  isEnabled: true,
+                  isDefault: false
+                })
+              });
+            }
+            this.closeModelPresetsModal();
+            await this.loadModels();
+          } catch (e) { console.error('Failed to batch add models:', e); alert('批量添加失败'); }
+        },
+
+        modelTypeClass(type) {
+          return {
+            chat: 'bg-blue-100 text-blue-800',
+            embedding: 'bg-green-100 text-green-800',
+            vision: 'bg-purple-100 text-purple-800',
+            image: 'bg-orange-100 text-orange-800'
+          }[type] || 'bg-gray-100';
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

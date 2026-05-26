@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用户管理 - {{ siteName }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="usersAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">用户管理</h1>
+          <button @click="showCreateModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            + 新建用户
+          </button>
+        </div>
+
+        <!-- Users Table -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b">
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">用户名</th>
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">邮箱</th>
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">角色</th>
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">状态</th>
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">创建时间</th>
+                  <th class="text-left py-3 px-4 font-medium text-gray-600">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="user in users" :key="user.id">
+                  <tr class="border-b hover:bg-gray-50">
+                    <td class="py-3 px-4" x-text="user.username"></td>
+                    <td class="py-3 px-4" x-text="user.email || '-'"></td>
+                    <td class="py-3 px-4">
+                      <span class="px-2 py-1 rounded text-xs" :class="roleClass(user.role)" x-text="roleLabel(user.role)"></span>
+                    </td>
+                    <td class="py-3 px-4">
+                      <span class="px-2 py-1 rounded text-xs" :class="user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="user.isActive ? '激活' : '禁用'"></span>
+                    </td>
+                    <td class="py-3 px-4 text-sm text-gray-500" x-text="formatDate(user.createdAt)"></td>
+                    <td class="py-3 px-4">
+                      <div class="flex space-x-2">
+                        <button @click="editUser(user)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                        <button @click="assignRoles(user)" class="text-purple-600 hover:underline text-sm">角色</button>
+                        <button @click="deleteUser(user)" class="text-red-600 hover:underline text-sm">删除</button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="users.length === 0" class="text-center py-8 text-gray-500">
+            暂无用户
+          </div>
+        </div>
+      </div>
+
+      <!-- Create/Edit User Modal -->
+      <div x-show="showCreateModal || showEditModal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div @click.away="showCreateModal = false; showEditModal = false" class="bg-white rounded-xl p-6 w-full max-w-md">
+          <h2 class="text-xl font-bold mb-4" x-text="showEditModal ? '编辑用户' : '新建用户'"></h2>
+          <form @submit.prevent="saveUser">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                <input type="text" x-model="formData.username" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                <input type="email" x-model="formData.email" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                <input type="password" x-model="formData.password" :required="!showEditModal" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">角色</label>
+                <select x-model="formData.role" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="viewer">Viewer</option>
+                  <option value="reviewer">Reviewer</option>
+                  <option value="editor">Editor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div x-show="showEditModal">
+                <label class="flex items-center">
+                  <input type="checkbox" x-model="formData.isActive" class="mr-2" />
+                  <span class="text-sm text-gray-700">激活状态</span>
+                </label>
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+              <button type="button" @click="showCreateModal = false; showEditModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+              <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Assign Roles Modal -->
+      <div x-show="showRolesModal" x-transition class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div @click.away="showRolesModal = false" class="bg-white rounded-xl p-6 w-full max-w-md">
+          <h2 class="text-xl font-bold mb-4">分配角色</h2>
+          <div class="space-y-3">
+            <template x-for="role in availableRoles" :key="role.name">
+              <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" :value="role.name" x-model="selectedRoles" class="mr-3" />
+                <div>
+                  <div class="font-medium" x-text="role.label"></div>
+                  <div class="text-sm text-gray-500" x-text="role.description"></div>
+                </div>
+              </label>
+            </template>
+          </div>
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click="showRolesModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button type="button" @click="saveRoles" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast -->
+      <div x-show="toast.show" x-transition class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg z-50">
+        <span x-text="toast.message"></span>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('usersAdmin', () => ({
+        users: [],
+        showCreateModal: false,
+        showEditModal: false,
+        showRolesModal: false,
+        formData: { id: '', username: '', email: '', password: '', role: 'viewer', isActive: true },
+        selectedUserId: null,
+        selectedRoles: [],
+        availableRoles: [
+          { name: 'admin', label: 'Administrator', description: 'Full system access' },
+          { name: 'editor', label: 'Editor', description: 'Can create and edit content' },
+          { name: 'reviewer', label: 'Reviewer', description: 'Can review and approve content' },
+          { name: 'viewer', label: 'Viewer', description: 'Read-only access' },
+        ],
+        toast: { show: false, message: '' },
+
+        async init() {
+          await this.loadUsers();
+        },
+
+        async loadUsers() {
+          try {
+            const res = await fetch('/api/users');
+            if (res.ok) {
+              this.users = await res.json();
+            }
+          } catch (e) { console.error('Failed to load users:', e); }
+        },
+
+        editUser(user) {
+          this.formData = { id: user.id, username: user.username, email: user.email, password: '', role: user.role, isActive: user.isActive };
+          this.showEditModal = true;
+        },
+
+        async assignRoles(user) {
+          this.selectedUserId = user.id;
+          this.selectedRoles = [user.role];
+          this.showRolesModal = true;
+        },
+
+        async saveRoles() {
+          try {
+            await fetch(`/api/users/${this.selectedUserId}/roles`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: this.selectedRoles[0] || 'viewer' })
+            });
+            this.showRolesModal = false;
+            this.showToast('角色分配成功');
+          } catch (e) { console.error('Failed to save roles:', e); }
+        },
+
+        async saveUser() {
+          try {
+            const isEdit = this.showEditModal;
+            const url = isEdit ? `/api/users/${this.formData.id}` : '/api/users';
+            const method = isEdit ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.formData)
+            });
+            if (res.ok) {
+              this.showCreateModal = false;
+              this.showEditModal = false;
+              await this.loadUsers();
+              this.showToast(isEdit ? '用户已更新' : '用户已创建');
+            }
+          } catch (e) { console.error('Failed to save user:', e); }
+        },
+
+        async deleteUser(user) {
+          if (!confirm(`确定要删除用户 ${user.username} 吗？`)) return;
+          try {
+            await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
+            await this.loadUsers();
+            this.showToast('用户已删除');
+          } catch (e) { console.error('Failed to delete user:', e); }
+        },
+
+        roleClass(role) {
+          return { admin: 'bg-red-100 text-red-800', editor: 'bg-blue-100 text-blue-800', reviewer: 'bg-purple-100 text-purple-800', viewer: 'bg-gray-100 text-gray-800' }[role] || 'bg-gray-100';
+        },
+
+        roleLabel(role) {
+          return { admin: 'Admin', editor: 'Editor', reviewer: 'Reviewer', viewer: 'Viewer' }[role] || role;
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        showToast(message) {
+          this.toast.message = message;
+          this.toast.show = true;
+          setTimeout(() => { this.toast.show = false; }, 3000);
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

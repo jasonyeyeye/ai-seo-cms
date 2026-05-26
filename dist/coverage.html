@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coverage 分析 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="coverageAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">📊 内容覆盖度分析</h1>
+          <p class="text-gray-500 mt-1">分析分类和品牌的覆盖率，识别内容缺口</p>
+        </div>
+
+        <!-- Overview Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-xl p-6 shadow-sm">
+            <div class="text-sm text-gray-500 mb-1">总分类数</div>
+            <div class="text-2xl font-bold text-gray-900" x-text="stats.totalCategories"></div>
+          </div>
+          <div class="bg-white rounded-xl p-6 shadow-sm">
+            <div class="text-sm text-gray-500 mb-1">已覆盖分类</div>
+            <div class="text-2xl font-bold text-green-600" x-text="stats.coveredCategories"></div>
+          </div>
+          <div class="bg-white rounded-xl p-6 shadow-sm">
+            <div class="text-sm text-gray-500 mb-1">平均覆盖率</div>
+            <div class="text-2xl font-bold text-indigo-600" x-text="stats.avgCoverage + '%'"></div>
+          </div>
+          <div class="bg-white rounded-xl p-6 shadow-sm">
+            <div class="text-sm text-gray-500 mb-1">内容缺口</div>
+            <div class="text-2xl font-bold text-red-500" x-text="stats.gaps"></div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl p-6 shadow-sm mb-6">
+          <div class="flex flex-wrap items-center gap-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">分类层级</label>
+              <select x-model="filterLevel" @change="loadCoverage()" class="px-3 py-2 border rounded-lg">
+                <option value="">全部层级</option>
+                <option value="0">一级分类</option>
+                <option value="1">二级分类</option>
+                <option value="2">三级分类</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">覆盖率阈值</label>
+              <select x-model="filterThreshold" @change="loadCoverage()" class="px-3 py-2 border rounded-lg">
+                <option value="0">全部</option>
+                <option value="50">≥ 50%</option>
+                <option value="70">≥ 70%</option>
+                <option value="90">≥ 90%</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">排序</label>
+              <select x-model="sortBy" @change="loadCoverage()" class="px-3 py-2 border rounded-lg">
+                <option value="coverage">按覆盖率</option>
+                <option value="products">按商品数</option>
+                <option value="name">按名称</option>
+              </select>
+            </div>
+            <button @click="exportCoverage" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm">
+              <i class="fas fa-download mr-1"></i> 导出数据
+            </button>
+          </div>
+        </div>
+
+        <!-- Coverage Heatmap -->
+        <div class="bg-white rounded-xl p-6 shadow-sm mb-6">
+          <h2 class="text-lg font-semibold mb-4">分类覆盖度热力图</h2>
+          <div class="overflow-x-auto">
+            <div class="min-w-full">
+              <!-- Heatmap Grid -->
+              <div class="grid gap-1" :style="'grid-template-columns: repeat(' + Math.min(categories.length, 12) + ', minmax(80px, 1fr))'">
+                <template x-for="cat in sortedCategories" :key="cat.slug">
+                  <div class="relative group">
+                    <div class="aspect-square rounded-lg flex items-center justify-center cursor-pointer transition-transform hover:scale-105"
+                         :class="getHeatmapColor(cat.coverage)"
+                         :title="cat.name + ': ' + cat.coverage + '%'">
+                      <span class="text-xs font-medium text-white" x-text="cat.coverage + '%'"></span>
+                    </div>
+                    <!-- Tooltip -->
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+                      <div class="font-semibold" x-text="cat.name"></div>
+                      <div>覆盖率: <span x-text="cat.coverage + '%'"></span></div>
+                      <div>商品数: <span x-text="cat.productCount"></span></div>
+                      <div>缺口: <span x-text="cat.gap"></span></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+          <!-- Legend -->
+          <div class="flex items-center gap-4 mt-4 text-xs">
+            <span class="text-gray-500">覆盖率:</span>
+            <div class="flex items-center gap-1">
+              <div class="w-6 h-6 rounded bg-red-300"></div>
+              <span>0-25%</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="w-6 h-6 rounded bg-orange-300"></div>
+              <span>25-50%</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="w-6 h-6 rounded bg-yellow-300"></div>
+              <span>50-75%</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="w-6 h-6 rounded bg-green-300"></div>
+              <span>75-100%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category Details Table -->
+        <div class="bg-white rounded-xl p-6 shadow-sm">
+          <h2 class="text-lg font-semibold mb-4">分类详情列表</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-200">
+                  <th class="text-left py-3 px-4 font-semibold text-gray-700">分类名称</th>
+                  <th class="text-left py-3 px-4 font-semibold text-gray-700">层级</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">覆盖率</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">商品数</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">目标</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">缺口</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="cat in sortedCategories" :key="cat.slug">
+                  <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-3 px-4">
+                      <a :href="'/category/' + cat.slug" class="text-indigo-600 hover:underline" x-text="cat.name"></a>
+                    </td>
+                    <td class="py-3 px-4 text-gray-500" x-text="cat.level + 1 + '级'"></td>
+                    <td class="py-3 px-4 text-center">
+                      <div class="flex items-center justify-center gap-2">
+                        <div class="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div class="h-full rounded-full" :class="getHeatmapColorClass(cat.coverage)" :style="'width:' + cat.coverage + '%'"></div>
+                        </div>
+                        <span x-text="cat.coverage + '%'"></span>
+                      </div>
+                    </td>
+                    <td class="py-3 px-4 text-center" x-text="cat.productCount"></td>
+                    <td class="py-3 px-4 text-center" x-text="cat.target"></td>
+                    <td class="py-3 px-4 text-center">
+                      <span x-show="cat.gap > 0" class="text-red-500" x-text="cat.gap"></span>
+                      <span x-show="cat.gap <= 0" class="text-green-500">-</span>
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                      <span class="px-2 py-1 rounded-full text-xs font-medium"
+                            :class="getStatusClass(cat.coverage)" x-text="getStatusText(cat.coverage)"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('coverageAdmin', () => ({
+        loading: true,
+        categories: [],
+        stats: {
+          totalCategories: 0,
+          coveredCategories: 0,
+          avgCoverage: 0,
+          gaps: 0,
+        },
+        filterLevel: '',
+        filterThreshold: 0,
+        sortBy: 'coverage',
+
+        get sortedCategories() {
+          let filtered = [...this.categories];
+
+          if (this.filterLevel !== '') {
+            filtered = filtered.filter(c => c.level === parseInt(this.filterLevel));
+          }
+          if (this.filterThreshold > 0) {
+            filtered = filtered.filter(c => c.coverage >= this.filterThreshold);
+          }
+
+          filtered.sort((a, b) => {
+            if (this.sortBy === 'coverage') return b.coverage - a.coverage;
+            if (this.sortBy === 'products') return b.productCount - a.productCount;
+            if (this.sortBy === 'name') return a.name.localeCompare(b.name);
+            return 0;
+          });
+
+          return filtered;
+        },
+
+        async init() {
+          await this.loadCoverage();
+        },
+
+        async loadCoverage() {
+          this.loading = true;
+          try {
+            const res = await fetch('/api/analytics/coverage');
+            if (res.ok) {
+              const data = await res.json();
+              this.categories = data.categories || [];
+              this.stats = data.stats || this.stats;
+            }
+          } catch (e) {
+            console.error('Failed to load coverage:', e);
+            // Use mock data for demo
+            this.categories = this.generateMockData();
+            this.calculateStats();
+          }
+          this.loading = false;
+        },
+
+        generateMockData() {
+          const cats = ['Electronics', 'Audio', 'Phones', 'Computers', 'Cameras', 'Gaming', 'Wearables', 'Accessories', 'Home', 'Kitchen', 'Sports', 'Fitness'];
+          return cats.map((name, i) => ({
+            name,
+            slug: name.toLowerCase(),
+            level: i % 3,
+            coverage: Math.floor(Math.random() * 100),
+            productCount: Math.floor(Math.random() * 100) + 10,
+            target: 50,
+            gap: Math.max(0, 50 - Math.floor(Math.random() * 100)),
+          }));
+        },
+
+        calculateStats() {
+          this.stats.totalCategories = this.categories.length;
+          this.stats.coveredCategories = this.categories.filter(c => c.coverage >= 50).length;
+          this.stats.avgCoverage = this.categories.length > 0
+            ? Math.round(this.categories.reduce((sum, c) => sum + c.coverage, 0) / this.categories.length)
+            : 0;
+          this.stats.gaps = this.categories.filter(c => c.coverage < 30).length;
+        },
+
+        getHeatmapColor(coverage) {
+          if (coverage >= 75) return 'bg-green-400';
+          if (coverage >= 50) return 'bg-yellow-300';
+          if (coverage >= 25) return 'bg-orange-300';
+          return 'bg-red-300';
+        },
+
+        getHeatmapColorClass(coverage) {
+          if (coverage >= 75) return 'bg-green-400';
+          if (coverage >= 50) return 'bg-yellow-300';
+          if (coverage >= 25) return 'bg-orange-300';
+          return 'bg-red-300';
+        },
+
+        getStatusClass(coverage) {
+          if (coverage >= 75) return 'bg-green-100 text-green-800';
+          if (coverage >= 50) return 'bg-yellow-100 text-yellow-800';
+          if (coverage >= 25) return 'bg-orange-100 text-orange-800';
+          return 'bg-red-100 text-red-800';
+        },
+
+        getStatusText(coverage) {
+          if (coverage >= 75) return '优秀';
+          if (coverage >= 50) return '良好';
+          if (coverage >= 25) return '需改进';
+          return '严重不足';
+        },
+
+        exportCoverage() {
+          const data = this.sortedCategories.map(c => ({
+            category: c.name,
+            slug: c.slug,
+            level: c.level + 1,
+            coverage: c.coverage + '%',
+            products: c.productCount,
+            target: c.target,
+            gap: c.gap,
+          }));
+
+          const csv = [
+            ['Category', 'Slug', 'Level', 'Coverage', 'Products', 'Target', 'Gap'].join(','),
+            ...data.map(row => Object.values(row).join(','))
+          ].join('\n');
+
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `coverage-analysis-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+      }));
+    });
+  </script>
+</body>
+</html>

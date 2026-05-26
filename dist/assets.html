@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>资产库 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="assetsAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">📦 资产库</h1>
+            <p class="text-gray-500 mt-1">管理可复用的内容资产</p>
+          </div>
+          <button @click="showCreateModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            + 添加资产
+          </button>
+          <button @click="showImportModal = true" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+            导入
+          </button>
+          <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open" @click.away="open = false" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+              导出 ▼
+            </button>
+            <div x-show="open" class="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg z-10">
+              <button @click="exportAssets('csv')" class="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded-lg">CSV</button>
+              <button @click="exportAssets('json')" class="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded-lg">JSON</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Type Tabs -->
+        <div class="flex space-x-2 mb-6">
+          <button @click="filterType = ''" :class="filterType === '' ? 'bg-blue-600 text-white' : 'bg-white'" class="px-4 py-2 rounded-lg transition">全部</button>
+          <button @click="filterType = 'faq'" :class="filterType === 'faq' ? 'bg-blue-600 text-white' : 'bg-white'" class="px-4 py-2 rounded-lg transition">FAQ</button>
+          <button @click="filterType = 'pros_cons'" :class="filterType === 'pros_cons' ? 'bg-blue-600 text-white' : 'bg-white'" class="px-4 py-2 rounded-lg transition">优缺点</button>
+          <button @click="filterType = 'comparison_matrix'" :class="filterType === 'comparison_matrix' ? 'bg-blue-600 text-white' : 'bg-white'" class="px-4 py-2 rounded-lg transition">对比矩阵</button>
+          <button @click="filterType = 'user_opinion'" :class="filterType === 'user_opinion' ? 'bg-blue-600 text-white' : 'bg-white'" class="px-4 py-2 rounded-lg transition">用户观点</button>
+        </div>
+
+        <!-- Batch Actions -->
+        <div x-show="selectedAssets.length > 0" class="mb-4 p-3 bg-blue-50 rounded-lg flex items-center justify-between">
+          <span class="text-blue-700">已选择 <span x-text="selectedAssets.length"></span> 项</span>
+          <div class="flex space-x-2">
+            <button @click="batchDelete" class="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm">批量删除</button>
+            <button @click="batchExport" class="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm">导出选中</button>
+          </div>
+        </div>
+
+        <!-- Assets List -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left">
+                  <input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected" class="rounded">
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">内容</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">关联</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">使用次数</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">最后使用</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">更新时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <template x-for="asset in filteredAssets" :key="asset.id">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-4">
+                    <input type="checkbox" :value="asset.id" x-model="selectedAssets" class="rounded">
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded" :class="typeClass(asset.type)" x-text="typeLabel(asset.type)"></span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <template x-if="asset.type === 'faq'">
+                      <div>
+                        <div class="font-medium text-gray-900" x-text="asset.question"></div>
+                        <div class="text-sm text-gray-500 mt-1" x-text="asset.answer?.substring(0, 60) + '...'"></div>
+                      </div>
+                    </template>
+                    <template x-if="asset.type !== 'faq'">
+                      <div class="text-gray-900 text-sm line-clamp-2" x-text="asset.content?.substring(0, 80) + '...'"></div>
+                    </template>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-500">
+                    <span x-show="asset.entityId" class="mr-2">实体:#<span x-text="asset.entityId"></span></span>
+                    <span x-show="asset.topicId">主题:#<span x-text="asset.topicId"></span></span>
+                    <span x-show="!asset.entityId && !asset.topicId" class="text-gray-400">无</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="text-sm font-medium" :class="getUsageCount(asset.id) > 0 ? 'text-green-600' : 'text-gray-400'" x-text="getUsageCount(asset.id) + ' 篇'"></span>
+                    <button @click="showUsageModal(asset)" class="ml-2 text-blue-600 hover:underline text-xs">查看</button>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(getLastUsed(asset.id))"></td>
+                  <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(asset.updatedAt)"></td>
+                  <td class="px-6 py-4">
+                    <div class="flex space-x-2">
+                      <button @click="refreshAsset(asset)" class="text-green-600 hover:underline text-sm" :disabled="refreshing === asset.id">
+                        <span x-text="refreshing === asset.id ? '刷新中...' : '刷新'"></span>
+                      </button>
+                      <button @click="editAsset(asset)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                      <button @click="deleteAsset(asset.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="loading" class="text-center py-12 text-gray-500">加载中...</div>
+          <div x-show="!loading && assets.length === 0" class="text-center py-12 text-gray-500">暂无资产</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Usage Modal -->
+    <div x-show="showingUsageModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold" x-text="selectedAsset ? selectedAsset.type + ' 使用记录' : '使用记录'"></h2>
+          <button @click="showingUsageModal = false" class="text-gray-500 hover:text-gray-700">&times;</button>
+        </div>
+        <div x-show="usageLoading" class="text-center py-8 text-gray-500">加载中...</div>
+        <div x-show="!usageLoading">
+          <div x-show="usageRecords.length === 0" class="text-center py-8 text-gray-500">暂无使用记录</div>
+          <div class="space-y-3">
+            <template x-for="record in usageRecords" :key="record.postId">
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <a :href="'/posts/' + record.postSlug" target="_blank" class="font-medium text-blue-600 hover:underline" x-text="record.postTitle || record.postSlug"></a>
+                <div class="text-sm text-gray-500 mt-1">
+                  <span x-text="record.publishedAt ? '发布于: ' + formatDate(record.publishedAt) : '未发布'"></span>
+                  <span class="ml-4">最后更新: <span x-text="formatDate(record.lastUsedAt || record.updatedAt)"></span></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div x-show="showCreateModal || editingAsset" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-6" x-text="editingAsset ? '编辑资产' : '添加资产'"></h2>
+        <form @submit.prevent="saveAsset" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">类型 *</label>
+            <select x-model="form.type" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="faq">FAQ</option>
+              <option value="pros_cons">优缺点</option>
+              <option value="comparison_matrix">对比矩阵</option>
+              <option value="user_opinion">用户观点</option>
+            </select>
+          </div>
+          <template x-if="form.type === 'faq'">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">问题</label>
+              <input type="text" x-model="form.question" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </template>
+          <template x-if="form.type === 'faq'">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">答案</label>
+              <textarea x-model="form.answer" rows="3" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+          </template>
+          <template x-if="form.type !== 'faq'">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">内容 (JSON)</label>
+              <textarea x-model="form.content" rows="4" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+            </div>
+          </template>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">实体ID</label>
+            <input type="number" x-model="form.entityId" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">主题ID</label>
+            <input type="number" x-model="form.topicId" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">来源</label>
+            <input type="text" x-model="form.source" placeholder="如: Reddit, Amazon" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="flex justify-end space-x-3 pt-4">
+            <button type="button" @click="closeModal" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div x-show="showImportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-6">批量导入资产</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">导入格式</label>
+            <div class="flex space-x-4">
+              <label class="flex items-center">
+                <input type="radio" x-model="importFormat" value="csv" class="mr-2"> CSV
+              </label>
+              <label class="flex items-center">
+                <input type="radio" x-model="importFormat" value="json" class="mr-2"> JSON
+              </label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">粘贴 <span x-text="importFormat.toUpperCase()"></span> 数据</label>
+            <textarea x-model="importData" rows="8" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" :placeholder="importFormat === 'csv' ? 'type,question,answer,content,entityId,topicId,source\nfaq,什么是AI?,AI是人工智能,{},1,1,Reddit\npros_cons,\"优点1|优点2\",\"缺点1|缺点2\",{},2,,' : '[{\"type\":\"faq\",\"question\":\"...\",\"answer\":\"...\"}]'"></textarea>
+          </div>
+          <div x-show="importPreview.length > 0" class="p-4 bg-gray-50 rounded-lg">
+            <div class="text-sm font-medium mb-2">预览 (<span x-text="importPreview.length"></span> 条)</div>
+            <div class="max-h-40 overflow-y-auto text-xs font-mono">
+              <template x-for="(item, i) in importPreview.slice(0, 5)" :key="i">
+                <div class="py-1 border-b" x-text="JSON.stringify(item).substring(0, 80) + '...'"></div>
+              </template>
+            </div>
+          </div>
+          <div class="flex justify-end space-x-3 pt-4">
+            <button type="button" @click="showImportModal = false; importData = ''; importPreview = []" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button type="button" @click="previewImport" :disabled="!importData" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50">预览</button>
+            <button type="button" @click="doImport" :disabled="importPreview.length === 0" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">导入</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('assetsAdmin', () => ({
+        assets: [],
+        usageData: {},
+        loading: true,
+        filterType: '',
+        showCreateModal: false,
+        editingAsset: null,
+        showingUsageModal: false,
+        selectedAsset: null,
+        usageRecords: [],
+        usageLoading: false,
+        refreshing: null,
+        selectedAssets: [],
+        showImportModal: false,
+        importFormat: 'csv',
+        importData: '',
+        importPreview: [],
+        form: { type: 'faq', question: '', answer: '', content: '', entityId: null, topicId: null, source: '' },
+
+        get filteredAssets() {
+          if (!this.filterType) return this.assets;
+          return this.assets.filter(a => a.type === this.filterType);
+        },
+
+        get isAllSelected() {
+          return this.filteredAssets.length > 0 && this.selectedAssets.length === this.filteredAssets.length;
+        },
+
+        async init() {
+          await this.loadAssets();
+          await this.loadUsageData();
+        },
+
+        async loadAssets() {
+          this.loading = true;
+          try {
+            const res = await fetch('/api/assets');
+            if (res.ok) {
+              const data = await res.json();
+              this.assets = data.assets || [];
+            }
+          } catch (e) { console.error('Failed to load assets:', e); }
+          finally { this.loading = false; }
+        },
+
+        async loadUsageData() {
+          try {
+            const res = await fetch('/api/assets/usage');
+            if (res.ok) {
+              const data = await res.json();
+              const usageMap = {};
+              for (const u of data.usage || []) {
+                usageMap[u.assetId] = u;
+              }
+              this.usageData = usageMap;
+            }
+          } catch (e) { console.error('Failed to load usage data:', e); }
+        },
+
+        getUsageCount(assetId) {
+          return this.usageData[assetId]?.usageCount || 0;
+        },
+
+        getLastUsed(assetId) {
+          return this.usageData[assetId]?.lastUsedAt || null;
+        },
+
+        async showUsageModal(asset) {
+          this.selectedAsset = asset;
+          this.showingUsageModal = true;
+          this.usageLoading = true;
+          this.usageRecords = [];
+
+          try {
+            const res = await fetch(`/api/assets/usage?assetId=${asset.id}`);
+            if (res.ok) {
+              const data = await res.json();
+              this.usageRecords = data.usage || [];
+            }
+          } catch (e) { console.error('Failed to load usage records:', e); }
+          this.usageLoading = false;
+        },
+
+        async refreshAsset(asset) {
+          if (!confirm('确定要刷新这个资产吗？')) return;
+          this.refreshing = asset.id;
+          try {
+            const res = await fetch(`/api/assets/${asset.id}/refresh`, { method: 'POST' });
+            if (res.ok) {
+              const data = await res.json();
+              alert('资产刷新已加入队列');
+              await this.loadUsageData();
+            }
+          } catch (e) { console.error('Failed to refresh asset:', e); alert('刷新失败'); }
+          this.refreshing = null;
+        },
+
+        editAsset(asset) {
+          this.editingAsset = asset;
+          this.form = {
+            type: asset.type,
+            question: asset.question || '',
+            answer: asset.answer || '',
+            content: asset.content || '',
+            entityId: asset.entityId,
+            topicId: asset.topicId,
+            source: asset.source || ''
+          };
+        },
+
+        async saveAsset() {
+          try {
+            const method = this.editingAsset ? 'PUT' : 'POST';
+            const url = this.editingAsset ? `/api/assets/${this.editingAsset.id}` : '/api/assets';
+            const payload = { ...this.form };
+            if (!payload.entityId) delete payload.entityId;
+            if (!payload.topicId) delete payload.topicId;
+            const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              this.closeModal();
+              await this.loadAssets();
+              await this.loadUsageData();
+            }
+          } catch (e) { console.error('Failed to save asset:', e); alert('保存失败'); }
+        },
+
+        async deleteAsset(id) {
+          if (!confirm('确定要删除这个资产吗？')) return;
+          try {
+            await fetch(`/api/assets/${id}`, { method: 'DELETE' });
+            await this.loadAssets();
+            await this.loadUsageData();
+          } catch (e) { console.error('Failed to delete asset:', e); }
+        },
+
+        closeModal() {
+          this.showCreateModal = false;
+          this.editingAsset = null;
+          this.form = { type: 'faq', question: '', answer: '', content: '', entityId: null, topicId: null, source: '' };
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '-';
+          return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        typeClass(type) {
+          return { faq: 'bg-blue-100 text-blue-800', pros_cons: 'bg-green-100 text-green-800', comparison_matrix: 'bg-purple-100 text-purple-800', user_opinion: 'bg-orange-100 text-orange-800' }[type] || 'bg-gray-100';
+        },
+
+        typeLabel(type) {
+          return { faq: 'FAQ', pros_cons: '优缺点', comparison_matrix: '对比矩阵', user_opinion: '用户观点' }[type] || type;
+        },
+
+        toggleSelectAll(event) {
+          if (event.target.checked) {
+            this.selectedAssets = this.filteredAssets.map(a => a.id);
+          } else {
+            this.selectedAssets = [];
+          }
+        },
+
+        async batchDelete() {
+          if (!confirm(`确定要删除选中的 ${this.selectedAssets.length} 项资产吗？`)) return;
+          try {
+            await fetch('/api/assets/batch-delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids: this.selectedAssets })
+            });
+            this.selectedAssets = [];
+            await this.loadAssets();
+            await this.loadUsageData();
+          } catch (e) { console.error('Failed to batch delete:', e); alert('批量删除失败'); }
+        },
+
+        async batchExport() {
+          const selected = this.assets.filter(a => this.selectedAssets.includes(a.id));
+          await this.downloadExport(selected, 'json');
+        },
+
+        async exportAssets(format) {
+          const res = await fetch(`/api/assets/export?format=${format}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (format === 'json') {
+              await this.downloadExport(data.assets, 'json');
+            } else {
+              // CSV export
+              const csv = this.convertToCsv(data.assets);
+              this.downloadFile(csv, 'assets.csv', 'text/csv');
+            }
+          }
+        },
+
+        convertToCsv(assets) {
+          const headers = ['id', 'type', 'question', 'answer', 'content', 'entityId', 'topicId', 'source', 'updatedAt'];
+          const rows = assets.map(a => headers.map(h => {
+            const val = a[h];
+            if (val === null || val === undefined) return '';
+            const str = String(val);
+            return str.includes(',') ? `"${str}"` : str;
+          }));
+          return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        },
+
+        async downloadExport(assets, format) {
+          if (format === 'json') {
+            this.downloadFile(JSON.stringify(assets, null, 2), 'assets.json', 'application/json');
+          }
+        },
+
+        downloadFile(content, filename, mimeType) {
+          const blob = new Blob([content], { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+
+        async previewImport() {
+          try {
+            const res = await fetch('/api/assets/preview-import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: this.importData, format: this.importFormat })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              this.importPreview = data.preview || [];
+            }
+          } catch (e) { console.error('Failed to preview import:', e); }
+        },
+
+        async doImport() {
+          try {
+            const res = await fetch('/api/assets/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: this.importData, format: this.importFormat })
+            });
+            if (res.ok) {
+              this.showImportModal = false;
+              this.importData = '';
+              this.importPreview = [];
+              await this.loadAssets();
+              alert('导入成功');
+            }
+          } catch (e) { console.error('Failed to import:', e); alert('导入失败'); }
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

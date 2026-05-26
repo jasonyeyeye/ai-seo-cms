@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="productReviewApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商品审核 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">📦 商品审核队列</h1>
+          <button @click="loadProducts" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+            🔄 刷新
+          </button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">待审核</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.pending">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已通过</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.approved">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已驳回</div>
+            <div class="text-3xl font-bold text-red-600" x-text="stats.rejected">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">总计</div>
+            <div class="text-3xl font-bold text-gray-900" x-text="stats.total">-</div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <input type="text" x-model="searchQuery" @keyup.enter="loadProducts" placeholder="搜索商品名称、品牌..." class="px-4 py-2 border border-gray-300 rounded-lg min-w-[200px]" />
+            <select x-model="filterStatus" @change="loadProducts" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="pending">待审核</option>
+              <option value="approved">已通过</option>
+              <option value="rejected">已驳回</option>
+              <option value="">全部</option>
+            </select>
+            <button @click="loadProducts" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">搜索</button>
+          </div>
+        </div>
+
+        <!-- Products Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">商品</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">品牌</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">分类</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">价格</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">状态</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">审核状态</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">创建时间</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="product in products" :key="product.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-3">
+                        <img :src="product.thumbnailUrl || '/placeholder.png'" class="w-12 h-12 rounded object-cover" />
+                        <div>
+                          <div class="font-medium text-gray-900 max-w-[200px] truncate" x-text="product.name"></div>
+                          <div class="text-xs text-gray-400" x-text="product.slug"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600" x-text="product.brand || '-'"></td>
+                    <td class="px-4 py-3 text-gray-600" x-text="product.category || '-'"></td>
+                    <td class="px-4 py-3">
+                      <div class="font-medium text-gray-900" x-text="'$' + parseFloat(product.currentPrice || product.originalPrice || 0).toFixed(2)"></div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="product.isPublished ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'" x-text="product.isPublished ? '已发布' : '草稿'"></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="reviewStatusClass(product)" x-text="reviewStatusText(product)"></span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500 text-xs" x-text="formatDate(product.createdAt)"></td>
+                    <td class="px-4 py-3">
+                      <button @click="viewProduct(product)" class="text-blue-600 hover:underline text-xs mr-2">查看</button>
+                      <template x-if="!product.isReviewed">
+                        <div class="inline-flex gap-2">
+                          <button @click="approveProduct(product)" class="text-green-600 hover:underline text-xs">通过</button>
+                          <button @click="rejectProduct(product)" class="text-red-600 hover:underline text-xs">驳回</button>
+                        </div>
+                      </template>
+                      <button @click="editProduct(product)" class="text-indigo-600 hover:underline text-xs">编辑</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && products.length === 0" class="p-8 text-center text-gray-400">
+            暂无待审核商品
+          </div>
+
+          <!-- Pagination -->
+          <div x-show="totalPages > 1" class="px-4 py-3 border-t border-gray-200 flex justify-between items-center">
+            <div class="text-sm text-gray-500">共 <span x-text="totalProducts"></span> 件商品</div>
+            <div class="flex gap-2">
+              <button @click="goToPage(currentPage - 1)" :disabled="currentPage <= 1" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">上一页</button>
+              <span class="px-3 py-1">第 <span x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+              <button @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">下一页</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- View Modal -->
+  <div x-show="viewModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="viewModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">商品详情</h2>
+        <button @click="viewModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6" x-show="selectedProduct">
+        <div class="flex items-start gap-4 mb-6">
+          <img :src="selectedProduct?.thumbnailUrl || '/placeholder.png'" class="w-24 h-24 rounded object-cover" />
+          <div>
+            <h3 class="text-xl font-bold text-gray-900" x-text="selectedProduct?.name"></h3>
+            <p class="text-gray-500 text-sm" x-text="selectedProduct?.slug"></p>
+            <div class="flex gap-2 mt-2">
+              <span class="px-2 py-1 rounded text-xs" :class="selectedProduct?.isPublished ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'" x-text="selectedProduct?.isPublished ? '已发布' : '草稿'"></span>
+              <span class="px-2 py-1 rounded text-xs" :class="reviewStatusClass(selectedProduct)" x-text="reviewStatusText(selectedProduct)"></span>
+            </div>
+          </div>
+        </div>
+        <dl class="grid grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-gray-500">品牌</dt>
+            <dd class="text-gray-900" x-text="selectedProduct?.brand || '-'"></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-gray-500">分类</dt>
+            <dd class="text-gray-900" x-text="selectedProduct?.category || '-'"></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-gray-500">当前价格</dt>
+            <dd class="text-gray-900" x-text="'$' + parseFloat(selectedProduct?.currentPrice || selectedProduct?.originalPrice || 0).toFixed(2)"></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-gray-500">原价</dt>
+            <dd class="text-gray-900" x-text="selectedProduct?.originalPrice ? '$' + parseFloat(selectedProduct?.originalPrice).toFixed(2) : '-'"></dd>
+          </div>
+          <div class="col-span-2">
+            <dt class="text-sm text-gray-500">描述</dt>
+            <dd class="text-gray-900 text-sm" x-text="selectedProduct?.description || '-'"></dd>
+          </div>
+          <div class="col-span-2">
+            <dt class="text-sm text-gray-500">摘要</dt>
+            <dd class="text-gray-900 text-sm" x-text="selectedProduct?.summary || '-'"></dd>
+          </div>
+        </dl>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="viewModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div x-show="editModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="editModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">编辑商品</h2>
+        <button @click="editModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">商品名称 *</label>
+          <input type="text" x-model="editData.name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+          <input type="text" x-model="editData.slug" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">品牌</label>
+            <input type="text" x-model="editData.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+            <input type="text" x-model="editData.category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+          <textarea x-model="editData.description" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">摘要 (AI生成)</label>
+          <textarea x-model="editData.summary" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">缩略图 URL</label>
+          <input type="text" x-model="editData.thumbnailUrl" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="editData.isPublished" id="editPublished" class="w-4 h-4" />
+          <label for="editPublished" class="text-sm text-gray-700">已发布</label>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="editModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="saveProduct()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('productReviewApp', () => ({
+      products: [],
+      loading: true,
+      searchQuery: '',
+      filterStatus: 'pending',
+      stats: { pending: 0, approved: 0, rejected: 0, total: 0 },
+      totalProducts: 0,
+      currentPage: 1,
+      totalPages: 0,
+      viewModal: false,
+      editModal: false,
+      selectedProduct: null,
+      editingProduct: null,
+      editData: {},
+
+      async init() {
+        await this.loadProducts();
+        await this.loadStats();
+      },
+
+      async loadStats() {
+        try {
+          const res = await fetch('/api/products?limit=1');
+          if (res.ok) {
+            const data = await res.json();
+            this.stats.total = data.pagination?.total || 0;
+          }
+          // Estimate pending/approved/rejected from products
+          const pendingRes = await fetch('/api/products?isReviewed=false&limit=1');
+          if (pendingRes.ok) {
+            const pData = await pendingRes.json();
+            this.stats.pending = pData.pagination?.total || 0;
+          }
+          this.stats.approved = this.stats.total - this.stats.pending;
+        } catch(e) { console.error(e); }
+      },
+
+      async loadProducts() {
+        this.loading = true;
+        try {
+          let url = '/api/products?page=' + this.currentPage + '&limit=20';
+          if (this.searchQuery) url += '&search=' + encodeURIComponent(this.searchQuery);
+          if (this.filterStatus) url += '&isReviewed=' + (this.filterStatus === 'approved' ? 'true' : this.filterStatus === 'rejected' ? 'false' : '');
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            this.products = data.products || [];
+            this.totalProducts = data.pagination?.total || 0;
+            this.totalPages = data.pagination?.totalPages || 1;
+            this.currentPage = data.pagination?.page || 1;
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+
+      goToPage(page) {
+        this.currentPage = page;
+        this.loadProducts();
+      },
+
+      reviewStatusClass(product) {
+        if (product.isReviewed === true) return 'bg-green-100 text-green-700';
+        if (product.isReviewed === false) return 'bg-red-100 text-red-700';
+        return 'bg-yellow-100 text-yellow-700';
+      },
+
+      reviewStatusText(product) {
+        if (product.isReviewed === true) return '已通过';
+        if (product.isReviewed === false) return '已驳回';
+        return '待审核';
+      },
+
+      formatDate(dateStr) {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleString('zh-CN');
+      },
+
+      viewProduct(product) {
+        this.selectedProduct = product;
+        this.viewModal = true;
+      },
+
+      editProduct(product) {
+        this.editingProduct = product;
+        this.editData = {
+          name: product.name,
+          slug: product.slug,
+          brand: product.brand || '',
+          brandSlug: product.brandSlug || '',
+          category: product.category || '',
+          categorySlug: product.categorySlug || '',
+          description: product.description || '',
+          summary: product.summary || '',
+          thumbnailUrl: product.thumbnailUrl || '',
+          isPublished: product.isPublished || false,
+        };
+        this.editModal = true;
+      },
+
+      async approveProduct(product) {
+        try {
+          const res = await fetch('/api/products/' + product.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isReviewed: true, isPublished: true })
+          });
+          if (res.ok) {
+            await this.loadProducts();
+            await this.loadStats();
+          }
+        } catch(e) { alert('操作失败: ' + e.message); }
+      },
+
+      async rejectProduct(product) {
+        try {
+          const res = await fetch('/api/products/' + product.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isReviewed: false })
+          });
+          if (res.ok) {
+            await this.loadProducts();
+            await this.loadStats();
+          }
+        } catch(e) { alert('操作失败: ' + e.message); }
+      },
+
+      async saveProduct() {
+        try {
+          const res = await fetch('/api/products/' + this.editingProduct.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.editData)
+          });
+          if (res.ok) {
+            this.editModal = false;
+            await this.loadProducts();
+          } else {
+            alert('保存失败');
+          }
+        } catch(e) { alert('保存失败: ' + e.message); }
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

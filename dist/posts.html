@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>文章管理 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="postsAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <!-- Breadcrumb -->
+        <nav class="mb-4 text-sm">
+          <ol class="flex items-center space-x-2">
+            <li><a href="/admin" class="text-blue-600 hover:underline">首页</a></li>
+            <li class="text-gray-400">›</li>
+            <li class="text-gray-600">文章管理</li>
+          </ol>
+        </nav>
+
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">📝 文章管理</h1>
+          <a href="/admin/posts/new" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 新建文章</a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <select x-model="filterStatus" @change="loadPosts" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">全部状态</option>
+              <option value="published">已发布</option>
+              <option value="draft">草稿</option>
+              <option value="noindex">noindex</option>
+              <option value="archived">已归档</option>
+            </select>
+            <input type="text" x-model="searchQuery" @keyup.enter="loadPosts" placeholder="搜索文章标题..."
+                   class="flex-1 min-w-[200px] px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <button @click="loadPosts" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">搜索</button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <!-- Batch Actions Bar -->
+          <div x-show="selectedPosts.length > 0" class="bg-blue-50 px-6 py-3 border-b flex items-center justify-between">
+            <div class="flex items-center">
+              <input type="checkbox" @click="toggleSelectAll" class="w-4 h-4 mr-2" checked>
+              <span class="text-sm text-gray-700">已选择 <span x-text="selectedPosts.length"></span> 篇文章</span>
+            </div>
+            <div class="flex space-x-2">
+              <select x-model="batchNewStatus" class="px-3 py-1 border rounded text-sm">
+                <option value="">-- 选择状态 --</option>
+                <option value="published">发布</option>
+                <option value="draft">草稿</option>
+                <option value="noindex">Noindex</option>
+                <option value="archived">归档</option>
+              </select>
+              <button @click="batchChangeStatus" :disabled="!batchNewStatus" class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50">批量修改</button>
+              <button @click="selectedPosts = []" class="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">取消</button>
+            </div>
+          </div>
+
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10">
+                  <input type="checkbox" @click="toggleSelectAll" :checked="selectedPosts.length === posts.length && posts.length > 0">
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">标题</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Slug</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">发布时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <template x-for="post in posts" :key="post.id">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4">
+                    <input type="checkbox" :value="post.id" x-model="selectedPosts" class="w-4 h-4">
+                  </td>
+                  <td class="px-6 py-4">
+                    <a :href="'/posts/' + post.slug" class="text-gray-900 hover:text-blue-600 font-medium" x-text="post.title"></a>
+                  </td>
+                  <td class="px-6 py-4 text-gray-500 text-sm" x-text="post.slug"></td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded-full" :class="statusClass(post.status)" x-text="statusLabel(post.status)"></span>
+                  </td>
+                  <td class="px-6 py-4 text-gray-500 text-sm" x-text="formatDate(post.publishedAt)"></td>
+                  <td class="px-6 py-4">
+                    <div class="flex space-x-2">
+                      <a :href="'/admin/posts/' + post.id + '/edit'" class="text-blue-600 hover:underline text-sm">编辑</a>
+                      <button @click="changeStatus(post.id, post.status === 'published' ? 'draft' : 'published')" class="text-green-600 hover:underline text-sm">
+                        <span x-text="post.status === 'published' ? '撤下' : '发布'"></span>
+                      </button>
+                      <button @click="deletePost(post.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="loading" class="text-center py-8 text-gray-500">加载中...</div>
+          <div x-show="!loading && posts.length === 0" class="text-center py-8 text-gray-500">暂无文章</div>
+        </div>
+
+        <div class="flex justify-center mt-6" x-show="pagination.totalPages > 1">
+          <div class="flex space-x-2">
+            <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50">上一页</button>
+            <span class="px-3 py-1">第 <span x-text="pagination.page"></span> / <span x-text="pagination.totalPages"></span> 页</span>
+            <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50">下一页</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('postsAdmin', () => ({
+        posts: [],
+        loading: true,
+        filterStatus: '',
+        searchQuery: '',
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        selectedPosts: [],
+        batchNewStatus: '',
+
+        async init() {
+          await this.loadPosts();
+        },
+
+        async loadPosts() {
+          this.loading = true;
+          try {
+            const params = new URLSearchParams({ page: this.pagination.page, limit: this.pagination.limit });
+            if (this.filterStatus) params.append('status', this.filterStatus);
+            if (this.searchQuery) params.append('search', this.searchQuery);
+            const res = await fetch(`/api/content/posts?${params}`);
+            const data = await res.json();
+            this.posts = data.data || [];
+            this.pagination = data.pagination || this.pagination;
+          } catch (e) { console.error('Failed to load posts:', e); }
+          finally { this.loading = false; }
+        },
+
+        async changeStatus(id, status) {
+          try {
+            await fetch(`/api/content/posts/${id}/status`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status })
+            });
+            await this.loadPosts();
+          } catch (e) { console.error('Failed to change status:', e); }
+        },
+
+        async deletePost(id) {
+          if (!confirm('确定要删除这篇文章吗？')) return;
+          try {
+            await fetch(`/api/content/posts/${id}`, { method: 'DELETE' });
+            await this.loadPosts();
+          } catch (e) { console.error('Failed to delete post:', e); }
+        },
+
+        toggleSelectAll() {
+          if (this.selectedPosts.length === this.posts.length) {
+            this.selectedPosts = [];
+          } else {
+            this.selectedPosts = this.posts.map(p => p.id);
+          }
+        },
+
+        async batchChangeStatus() {
+          if (!this.batchNewStatus || this.selectedPosts.length === 0) return;
+          if (!confirm(`确定要将 ${this.selectedPosts.length} 篇文章修改为 "${this.statusLabel(this.batchNewStatus)}" 吗？`)) return;
+
+          try {
+            const results = [];
+            for (const id of this.selectedPosts) {
+              await fetch(`/api/content/posts/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: this.batchNewStatus })
+              });
+              results.push(id);
+            }
+            this.selectedPosts = [];
+            this.batchNewStatus = '';
+            await this.loadPosts();
+          } catch (e) { console.error('Failed to batch update:', e); }
+        },
+
+        async goToPage(page) {
+          this.pagination.page = page;
+          await this.loadPosts();
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '-';
+          return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        statusClass(status) {
+          return { published: 'bg-green-100 text-green-800', draft: 'bg-yellow-100 text-yellow-800', noindex: 'bg-gray-100 text-gray-800', archived: 'bg-red-100 text-red-800' }[status] || 'bg-gray-100';
+        },
+
+        statusLabel(status) {
+          return { published: '已发布', draft: '草稿', noindex: 'noindex', archived: '已归档' }[status] || status;
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

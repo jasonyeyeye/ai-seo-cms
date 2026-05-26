@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="affiliatesApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>联盟链接管理 | AI SEO CMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Navigation -->
+  <nav class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold text-gray-900">联盟链接管理</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="/admin/dashboard" class="text-gray-500 hover:text-gray-700">
+            <i class="fas fa-home mr-1"></i> 返回后台
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Overview Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">总点击量</p>
+            <p class="text-3xl font-bold text-gray-900 mt-1" x-text="stats.totalClicks">0</p>
+          </div>
+          <div class="bg-blue-100 rounded-full p-3">
+            <i class="fas fa-mouse-pointer text-blue-600 text-xl"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">近7天点击</p>
+            <p class="text-3xl font-bold text-gray-900 mt-1" x-text="stats.recentClicks">0</p>
+          </div>
+          <div class="bg-green-100 rounded-full p-3">
+            <i class="fas fa-chart-line text-green-600 text-xl"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">活跃链接</p>
+            <p class="text-3xl font-bold text-gray-900 mt-1" x-text="links.length">0</p>
+          </div>
+          <div class="bg-purple-100 rounded-full p-3">
+            <i class="fas fa-link text-purple-600 text-xl"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Click Trend Chart -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">7天点击趋势</h2>
+      <div class="h-64">
+        <canvas id="clickTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Links Table -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-gray-900">联盟链接列表</h2>
+        <button @click="showCreateModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+          <i class="fas fa-plus mr-1"></i> 创建链接
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div x-show="loading" class="p-8 text-center">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+        <p class="text-gray-500 mt-2">加载中...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div x-show="!loading && links.length === 0" class="p-8 text-center">
+        <i class="fas fa-link text-gray-300 text-4xl mb-2"></i>
+        <p class="text-gray-500">暂无联盟链接</p>
+        <button @click="showCreateModal = true" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+          创建第一个链接
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div x-show="!loading && links.length > 0" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">产品名称</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">平台</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">点击量</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最后点击</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建时间</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="link in links" :key="link.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900" x-text="link.productName"></div>
+                  <div class="text-xs text-gray-500 truncate max-w-xs" x-text="link.destinationUrl"></div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <code class="text-sm bg-gray-100 px-2 py-1 rounded" x-text="link.token"></code>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="px-2 py-1 text-xs rounded-full"
+                    :class="link.platform === 'amazon' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'"
+                    x-text="link.platform === 'amazon' ? 'Amazon' : 'Other'">
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-semibold text-gray-900" x-text="link.clickCount || 0"></div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <span x-show="link.lastClickAt" x-text="formatDate(link.lastClickAt)"></span>
+                  <span x-show="!link.lastClickAt" class="text-gray-400">从未</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(link.createdAt)">
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <button @click="copyLink(link)" class="text-blue-600 hover:text-blue-800 mr-3" title="复制链接">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                  <a :href="'/go/' + link.token + '/stats'" class="text-green-600 hover:text-green-800 mr-3" title="查看统计">
+                    <i class="fas fa-chart-bar"></i>
+                  </a>
+                  <button @click="deleteLink(link)" class="text-red-600 hover:text-red-800" title="删除">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Link Modal -->
+  <div x-show="showCreateModal" x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div @click.away="showCreateModal = false" class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">创建联盟链接</h3>
+      </div>
+      <form @submit.prevent="createLink" class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">关联文章</label>
+          <select x-model="newLink.postId" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">选择文章...</option>
+            <template x-for="post in posts" :key="post.id">
+              <option :value="post.id" x-text="post.title"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">产品名称</label>
+          <input type="text" x-model="newLink.productName" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如：iPhone 15">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">目标链接</label>
+          <input type="url" x-model="newLink.destinationUrl" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://...">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">平台</label>
+          <select x-model="newLink.platform" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="amazon">Amazon</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-3 pt-4">
+          <button type="button" @click="showCreateModal = false" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+            取消
+          </button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            创建
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div x-show="toast.show" x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0 transform translate-y-4"
+    x-transition:enter-end="opacity-100 transform translate-y-0"
+    x-transition:leave="transition ease-in duration-200"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg">
+    <span x-text="toast.message"></span>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('affiliatesApp', () => ({
+        links: [],
+        posts: [],
+        stats: {
+          totalClicks: 0,
+          recentClicks: 0,
+          clicksByDay: []
+        },
+        loading: true,
+        showCreateModal: false,
+        newLink: {
+          postId: '',
+          productName: '',
+          destinationUrl: '',
+          platform: 'amazon'
+        },
+        toast: {
+          show: false,
+          message: ''
+        },
+        chart: null,
+
+        async init() {
+          await this.loadData();
+        },
+
+        async loadData() {
+          this.loading = true;
+          try {
+            const [linksRes, statsRes, postsRes] = await Promise.all([
+              fetch('/api/affiliates'),
+              fetch('/api/affiliates/stats/overview'),
+              fetch('/api/content/posts?limit=100&page=1')
+            ]);
+
+            const linksData = await linksRes.json();
+            this.links = linksData.links || [];
+
+            this.stats = await statsRes.json();
+
+            const postsData = await postsRes.json();
+            this.posts = postsData.data || [];
+
+            this.$nextTick(() => {
+              this.renderChart();
+            });
+          } catch (error) {
+            console.error('Failed to load data:', error);
+            this.showToast('加载数据失败');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        renderChart() {
+          const ctx = document.getElementById('clickTrendChart');
+          if (!ctx) return;
+
+          if (this.chart) {
+            this.chart.destroy();
+          }
+
+          const labels = this.stats.clicksByDay?.map(d => d.date) || [];
+          const data = this.stats.clicksByDay?.map(d => d.count) || [];
+
+          // Fill in missing days with 0
+          const last7Days = [];
+          for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            last7Days.push(dateStr);
+          }
+
+          const filledData = last7Days.map(date => {
+            const found = this.stats.clicksByDay?.find(d => d.date === date);
+            return found ? found.count : 0;
+          });
+
+          this.chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: last7Days.map(d => {
+                const date = new Date(d);
+                return `${date.getMonth() + 1}/${date.getDate()}`;
+              }),
+              datasets: [{
+                label: '日点击量',
+                data: filledData,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: false
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: {
+                    stepSize: 1
+                  }
+                }
+              }
+            }
+          });
+        },
+
+        async createLink() {
+          try {
+            const response = await fetch('/api/affiliates', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newLink)
+            });
+
+            if (!response.ok) {
+              throw new Error('创建失败');
+            }
+
+            this.showCreateModal = false;
+            this.newLink = { postId: '', productName: '', destinationUrl: '', platform: 'amazon' };
+            this.showToast('创建成功');
+            await this.loadData();
+          } catch (error) {
+            console.error('Create failed:', error);
+            this.showToast('创建失败');
+          }
+        },
+
+        async deleteLink(link) {
+          if (!confirm(`确定要删除链接 "${link.productName}" 吗？`)) {
+            return;
+          }
+          // Note: Delete endpoint would need to be added
+          this.showToast('删除功能开发中');
+        },
+
+        copyLink(link) {
+          const url = window.location.origin + '/go/' + link.token;
+          navigator.clipboard.writeText(url).then(() => {
+            this.showToast('链接已复制到剪贴板');
+          }).catch(() => {
+            this.showToast('复制失败');
+          });
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          const date = new Date(dateStr);
+          return date.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        },
+
+        showToast(message) {
+          this.toast.message = message;
+          this.toast.show = true;
+          setTimeout(() => {
+            this.toast.show = false;
+          }, 3000);
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

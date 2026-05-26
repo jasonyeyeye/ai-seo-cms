@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>告警中心 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="alertsManager">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">🚨 告警中心</h1>
+            <p class="text-gray-500 mt-1">实时告警规则与历史记录</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button @click="loadData" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+            <button @click="showRuleModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ 添加规则</button>
+          </div>
+        </div>
+
+        <!-- Active Alerts Banner -->
+        <div x-show="activeAlerts.length > 0" class="mb-8">
+          <template x-for="alert in activeAlerts" :key="alert.id">
+            <div class="mb-2 p-4 rounded-lg border-l-4 flex items-center justify-between" :class="severityClass(alert.severity)">
+              <div class="flex items-center">
+                <span class="text-2xl mr-3" x-text="alert.severity === 'critical' ? '🔴' : alert.severity === 'warning' ? '🟠' : '🔵'"></span>
+                <div>
+                  <div class="font-medium" x-text="alert.title"></div>
+                  <div class="text-sm opacity-80" x-text="alert.message"></div>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-sm opacity-70" x-text="formatDateTime(alert.createdAt)"></span>
+                <button @click="acknowledgeAlert(alert.id)" class="px-3 py-1 bg-white bg-opacity-20 rounded hover:bg-opacity-30">确认</button>
+                <button @click="resolveAlert(alert.id)" class="px-3 py-1 bg-white bg-opacity-20 rounded hover:bg-opacity-30">解决</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">活跃告警</div>
+            <div class="text-3xl font-bold text-red-600" x-text="stats.active"></div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已确认</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.acknowledged"></div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已解决</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.resolved"></div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">总规则数</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="rules.length"></div>
+          </div>
+        </div>
+
+        <!-- Alert Rules -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📋</span> 告警规则
+          </h2>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">规则名称</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">来源</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">严重度</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">冷却时间</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="rule in rules" :key="rule.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                      <div class="font-medium" x-text="rule.name"></div>
+                      <div class="text-xs text-gray-500" x-text="rule.description"></div>
+                    </td>
+                    <td class="px-4 py-3 text-sm" x-text="rule.source"></td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs" :class="severityBadgeClass(rule.severity)" x-text="rule.severity"></span>
+                    </td>
+                    <td class="px-4 py-3 text-sm" x-text="rule.cooldownMinutes + '分钟'"></td>
+                    <td class="px-4 py-3">
+                      <button @click="toggleRule(rule)" class="px-3 py-1 rounded text-xs" :class="rule.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="rule.enabled ? '启用' : '禁用'"></button>
+                    </td>
+                    <td class="px-4 py-3">
+                      <button @click="editRule(rule)" class="text-blue-600 hover:underline text-sm mr-2">编辑</button>
+                      <button @click="deleteRule(rule.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="rules.length === 0" class="text-center py-8 text-gray-500">暂无告警规则</div>
+        </div>
+
+        <!-- Alert History -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📜</span> 告警历史
+          </h2>
+          <div class="flex items-center space-x-4 mb-4">
+            <select x-model="filterStatus" @change="loadHistory" class="px-4 py-2 border rounded-lg">
+              <option value="">全部状态</option>
+              <option value="active">活跃</option>
+              <option value="acknowledged">已确认</option>
+              <option value="resolved">已解决</option>
+            </select>
+            <select x-model="filterSeverity" @change="loadHistory" class="px-4 py-2 border rounded-lg">
+              <option value="">全部严重度</option>
+              <option value="critical">严重</option>
+              <option value="warning">警告</option>
+              <option value="info">信息</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">来源</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">严重度</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">标题</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="alert in history" :key="alert.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-500" x-text="formatDateTime(alert.createdAt)"></td>
+                    <td class="px-4 py-3 text-sm" x-text="alert.source"></td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs" :class="severityBadgeClass(alert.severity)" x-text="alert.severity"></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="font-medium text-sm" x-text="alert.title"></div>
+                      <div class="text-xs text-gray-500 truncate max-w-xs" x-text="alert.message"></div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs" :class="statusBadgeClass(alert.status)" x-text="statusLabel(alert.status)"></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <template x-if="alert.status === 'active'">
+                        <div class="flex space-x-2">
+                          <button @click="acknowledgeAlert(alert.id)" class="text-yellow-600 hover:underline text-sm">确认</button>
+                          <button @click="resolveAlert(alert.id)" class="text-green-600 hover:underline text-sm">解决</button>
+                        </div>
+                      </template>
+                      <template x-if="alert.status === 'acknowledged'">
+                        <button @click="resolveAlert(alert.id)" class="text-green-600 hover:underline text-sm">解决</button>
+                      </template>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="history.length === 0" class="text-center py-8 text-gray-500">暂无告警历史</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Rule Modal -->
+    <div x-show="showRuleModal" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showRuleModal = false">
+      <div class="bg-white rounded-xl p-6 w-full max-w-md" @click.stop>
+        <h3 class="text-lg font-semibold mb-4" x-text="editingRule ? '编辑规则' : '添加规则'"></h3>
+        <form @submit.prevent="saveRule">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">规则ID</label>
+              <input type="text" x-model="ruleForm.id" :disabled="editingRule" class="w-full px-4 py-2 border rounded-lg" required />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
+              <input type="text" x-model="ruleForm.name" class="w-full px-4 py-2 border rounded-lg" required />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+              <input type="text" x-model="ruleForm.description" class="w-full px-4 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">来源</label>
+              <input type="text" x-model="ruleForm.source" class="w-full px-4 py-2 border rounded-lg" placeholder="如 cost_guard" required />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">条件 (JSON)</label>
+              <textarea x-model="ruleForm.condition" class="w-full px-4 py-2 border rounded-lg font-mono text-sm" rows="3" placeholder='{"field": "usagePercent", "operator": "greater_than", "value": 80}' required></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">严重度</label>
+              <select x-model="ruleForm.severity" class="w-full px-4 py-2 border rounded-lg">
+                <option value="info">信息</option>
+                <option value="warning">警告</option>
+                <option value="critical">严重</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">冷却时间 (分钟)</label>
+              <input type="number" x-model="ruleForm.cooldownMinutes" class="w-full px-4 py-2 border rounded-lg" min="1" />
+            </div>
+          </div>
+          <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" @click="showRuleModal = false; editingRule = null" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('alertsManager', () => ({
+        rules: [],
+        history: [],
+        activeAlerts: [],
+        stats: { active: 0, acknowledged: 0, resolved: 0 },
+        filterStatus: '',
+        filterSeverity: '',
+        showRuleModal: false,
+        editingRule: null,
+        ruleForm: {
+          id: '',
+          name: '',
+          description: '',
+          source: '',
+          condition: '{"field": "", "operator": "", "value": ""}',
+          severity: 'warning',
+          cooldownMinutes: 60,
+        },
+
+        async init() {
+          await this.loadData();
+          setInterval(() => this.loadActiveAlerts(), 30000);
+        },
+
+        async loadData() {
+          await Promise.all([this.loadRules(), this.loadHistory(), this.loadActiveAlerts(), this.loadStats()]);
+        },
+
+        async loadRules() {
+          try {
+            const res = await fetch('/api/alerts/rules');
+            if (res.ok) {
+              const data = await res.json();
+              this.rules = data.rules || [];
+            }
+          } catch (e) { console.error('Failed to load rules:', e); }
+        },
+
+        async loadHistory() {
+          try {
+            const params = new URLSearchParams({ limit: '50' });
+            if (this.filterStatus) params.set('status', this.filterStatus);
+            if (this.filterSeverity) params.set('severity', this.filterSeverity);
+            const res = await fetch('/api/alerts/history?' + params);
+            if (res.ok) {
+              const data = await res.json();
+              this.history = data.history || [];
+            }
+          } catch (e) { console.error('Failed to load history:', e); }
+        },
+
+        async loadActiveAlerts() {
+          try {
+            const res = await fetch('/api/alerts/active');
+            if (res.ok) {
+              const data = await res.json();
+              this.activeAlerts = data.alerts || [];
+            }
+          } catch (e) { console.error('Failed to load active alerts:', e); }
+        },
+
+        async loadStats() {
+          try {
+            const res = await fetch('/api/alerts/history?limit=100');
+            if (res.ok) {
+              const data = await res.json();
+              const all = data.history || [];
+              this.stats.active = all.filter(a => a.status === 'active').length;
+              this.stats.acknowledged = all.filter(a => a.status === 'acknowledged').length;
+              this.stats.resolved = all.filter(a => a.status === 'resolved').length;
+            }
+          } catch (e) { console.error('Failed to load stats:', e); }
+        },
+
+        async toggleRule(rule) {
+          try {
+            await fetch(`/api/alerts/rules/${rule.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: !rule.enabled }),
+            });
+            await this.loadRules();
+          } catch (e) { console.error('Failed to toggle rule:', e); }
+        },
+
+        editRule(rule) {
+          this.editingRule = rule;
+          this.ruleForm = {
+            id: rule.id,
+            name: rule.name,
+            description: rule.description || '',
+            source: rule.source,
+            condition: typeof rule.condition === 'string' ? rule.condition : JSON.stringify(rule.condition),
+            severity: rule.severity,
+            cooldownMinutes: rule.cooldownMinutes,
+          };
+          this.showRuleModal = true;
+        },
+
+        async saveRule() {
+          try {
+            const method = this.editingRule ? 'PUT' : 'POST';
+            const url = this.editingRule ? `/api/alerts/rules/${this.ruleForm.id}` : '/api/alerts/rules';
+            await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.ruleForm),
+            });
+            this.showRuleModal = false;
+            this.editingRule = null;
+            await this.loadRules();
+          } catch (e) { console.error('Failed to save rule:', e); }
+        },
+
+        async deleteRule(id) {
+          if (!confirm('确定要删除这个规则吗？')) return;
+          try {
+            await fetch(`/api/alerts/rules/${id}`, { method: 'DELETE' });
+            await this.loadRules();
+          } catch (e) { console.error('Failed to delete rule:', e); }
+        },
+
+        async acknowledgeAlert(id) {
+          try {
+            await fetch(`/api/alerts/history/${id}/acknowledge`, { method: 'POST' });
+            await this.loadData();
+          } catch (e) { console.error('Failed to acknowledge alert:', e); }
+        },
+
+        async resolveAlert(id) {
+          try {
+            await fetch(`/api/alerts/history/${id}/resolve`, { method: 'POST' });
+            await this.loadData();
+          } catch (e) { console.error('Failed to resolve alert:', e); }
+        },
+
+        severityClass(severity) {
+          return {
+            critical: 'bg-red-100 border-red-500 text-red-800',
+            warning: 'bg-orange-100 border-orange-500 text-orange-800',
+            info: 'bg-blue-100 border-blue-500 text-blue-800',
+          }[severity] || 'bg-gray-100 border-gray-500 text-gray-800';
+        },
+
+        severityBadgeClass(severity) {
+          return {
+            critical: 'bg-red-100 text-red-800',
+            warning: 'bg-orange-100 text-orange-800',
+            info: 'bg-blue-100 text-blue-800',
+          }[severity] || 'bg-gray-100 text-gray-800';
+        },
+
+        statusBadgeClass(status) {
+          return {
+            active: 'bg-red-100 text-red-800',
+            acknowledged: 'bg-yellow-100 text-yellow-800',
+            resolved: 'bg-green-100 text-green-800',
+          }[status] || 'bg-gray-100 text-gray-800';
+        },
+
+        statusLabel(status) {
+          return { active: '活跃', acknowledged: '已确认', resolved: '已解决' }[status] || status;
+        },
+
+        formatDateTime(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleString('zh-CN');
+        },
+      }));
+    });
+  </script>
+</body>
+</html>

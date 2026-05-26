@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="aiContentReviewApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 内容审核 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">🤖 AI 内容审核队列</h1>
+          <button @click="loadContents" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+            🔄 刷新
+          </button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">待审核</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.pending">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">生成中</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="stats.generating">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已完成</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.completed">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">失败</div>
+            <div class="text-3xl font-bold text-red-600" x-text="stats.failed">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">总计</div>
+            <div class="text-3xl font-bold text-gray-900" x-text="stats.total">-</div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <input type="text" x-model="searchQuery" @keyup.enter="loadContents" placeholder="搜索商品名称..." class="px-4 py-2 border border-gray-300 rounded-lg min-w-[200px]" />
+            <select x-model="filterStatus" @change="loadContents" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="generating">生成中</option>
+              <option value="completed">已完成</option>
+              <option value="failed">失败</option>
+            </select>
+            <select x-model="filterType" @change="loadContents" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部类型</option>
+              <option value="summary">摘要</option>
+              <option value="pros_cons">优缺点</option>
+              <option value="faq">FAQ</option>
+              <option value="comparison">对比</option>
+              <option value="ranking">排行榜</option>
+              <option value="scenario">场景推荐</option>
+            </select>
+            <button @click="loadContents" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">搜索</button>
+          </div>
+        </div>
+
+        <!-- Contents Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">商品</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">内容类型</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">质量评分</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">状态</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">模型</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">生成时间</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="content in contents" :key="content.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-gray-200 rounded flex items-center justify-center text-gray-400">
+                          <i class="fas fa-box"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-gray-900 max-w-[180px] truncate" x-text="content.productName || '商品 #' + content.productId"></div>
+                          <div class="text-xs text-gray-400" x-text="'ID: ' + content.productId"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700" x-text="contentTypeLabel(content.contentType)"></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-16 bg-gray-200 rounded-full h-2">
+                          <div class="h-2 rounded-full" :class="scoreColorClass(content.overallScore)" :style="'width: ' + (content.overallScore || 0) + '%'"></div>
+                        </div>
+                        <span class="text-xs font-medium" :class="scoreTextColorClass(content.overallScore)" x-text="content.overallScore || 0"></span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="statusClass(content.status)" x-text="statusLabel(content.status)"></span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600 text-xs" x-text="content.model || '-'"></td>
+                    <td class="px-4 py-3 text-gray-500 text-xs" x-text="formatDate(content.createdAt)"></td>
+                    <td class="px-4 py-3">
+                      <button @click="viewContent(content)" class="text-blue-600 hover:underline text-xs mr-2">查看</button>
+                      <template x-if="content.status === 'completed'">
+                        <div class="inline-flex gap-2">
+                          <button @click="approveContent(content)" class="text-green-600 hover:underline text-xs">通过</button>
+                          <button @click="rejectContent(content)" class="text-red-600 hover:underline text-xs">驳回</button>
+                        </div>
+                      </template>
+                      <button @click="regenerateContent(content)" class="text-indigo-600 hover:underline text-xs">重新生成</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && contents.length === 0" class="p-8 text-center text-gray-400">
+            暂无待审核内容
+          </div>
+
+          <!-- Pagination -->
+          <div x-show="totalPages > 1" class="px-4 py-3 border-t border-gray-200 flex justify-between items-center">
+            <div class="text-sm text-gray-500">共 <span x-text="totalContents"></span> 条内容</div>
+            <div class="flex gap-2">
+              <button @click="goToPage(currentPage - 1)" :disabled="currentPage <= 1" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">上一页</button>
+              <span class="px-3 py-1">第 <span x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+              <button @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">下一页</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- View Modal -->
+  <div x-show="viewModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="viewModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">AI 内容详情</h2>
+        <button @click="viewModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6" x-show="selectedContent">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <span class="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700 mr-2" x-text="contentTypeLabel(selectedContent?.contentType)"></span>
+            <span class="px-2 py-1 rounded text-xs font-medium" :class="statusClass(selectedContent?.status)" x-text="statusLabel(selectedContent?.status)"></span>
+          </div>
+          <div class="text-sm text-gray-500" x-text="'商品 #' + selectedContent?.productId"></div>
+        </div>
+
+        <!-- Quality Scores -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold" :class="scoreTextColorClass(selectedContent?.factualScore)" x-text="selectedContent?.factualScore || 0"></div>
+            <div class="text-xs text-gray-500">事实性</div>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold" :class="scoreTextColorClass(selectedContent?.uniquenessScore)" x-text="selectedContent?.uniquenessScore || 0"></div>
+            <div class="text-xs text-gray-500">独特性</div>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold" :class="scoreTextColorClass(selectedContent?.readabilityScore)" x-text="selectedContent?.readabilityScore || 0"></div>
+            <div class="text-xs text-gray-500">可读性</div>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold" :class="scoreTextColorClass(selectedContent?.overallScore)" x-text="selectedContent?.overallScore || 0"></div>
+            <div class="text-xs text-gray-500">综合评分</div>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="mb-6">
+          <h3 class="text-sm font-medium text-gray-700 mb-2">内容</h3>
+          <div class="bg-gray-50 rounded-lg p-4 text-sm" x-html="selectedContent?.content || '-'"></div>
+        </div>
+
+        <!-- Metadata -->
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span class="text-gray-500">模型:</span>
+            <span class="ml-2" x-text="selectedContent?.model || '-'"></span>
+          </div>
+          <div>
+            <span class="text-gray-500">提供商:</span>
+            <span class="ml-2" x-text="selectedContent?.provider || '-'"></span>
+          </div>
+          <div>
+            <span class="text-gray-500">Token用量:</span>
+            <span class="ml-2" x-text="selectedContent?.tokensUsed || 0"></span>
+          </div>
+          <div>
+            <span class="text-gray-500">响应时间:</span>
+            <span class="ml-2" x-text="selectedContent?.responseTimeMs ? selectedContent.responseTimeMs + 'ms' : '-'"></span>
+          </div>
+        </div>
+
+        <!-- Error if failed -->
+        <div x-show="selectedContent?.error" class="mt-4 p-4 bg-red-50 rounded-lg">
+          <div class="text-sm text-red-600" x-text="selectedContent?.error"></div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <template x-if="selectedContent?.status === 'completed'">
+          <button @click="rejectContent(selectedContent); viewModal = false;" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">驳回</button>
+        </template>
+        <template x-if="selectedContent?.status === 'completed'">
+          <button @click="approveContent(selectedContent); viewModal = false;" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">通过</button>
+        </template>
+        <button @click="viewModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('aiContentReviewApp', () => ({
+      contents: [],
+      loading: true,
+      searchQuery: '',
+      filterStatus: 'pending',
+      filterType: '',
+      stats: { pending: 0, generating: 0, completed: 0, failed: 0, total: 0 },
+      totalContents: 0,
+      currentPage: 1,
+      totalPages: 0,
+      viewModal: false,
+      selectedContent: null,
+
+      async init() {
+        await this.loadContents();
+        await this.loadStats();
+      },
+
+      async loadStats() {
+        try {
+          const res = await fetch('/api/ai-content/stats');
+          if (res.ok) {
+            this.stats = await res.json();
+          } else {
+            this.stats = { pending: 0, generating: 0, completed: 0, failed: 0, total: 0 };
+          }
+        } catch(e) { console.error(e); }
+      },
+
+      async loadContents() {
+        this.loading = true;
+        try {
+          let url = '/api/ai-content?page=' + this.currentPage + '&limit=20';
+          if (this.searchQuery) url += '&search=' + encodeURIComponent(this.searchQuery);
+          if (this.filterStatus) url += '&status=' + this.filterStatus;
+          if (this.filterType) url += '&type=' + this.filterType;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            this.contents = data.contents || [];
+            this.totalContents = data.pagination?.total || 0;
+            this.totalPages = data.pagination?.totalPages || 1;
+            this.currentPage = data.pagination?.page || 1;
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+
+      goToPage(page) {
+        this.currentPage = page;
+        this.loadContents();
+      },
+
+      contentTypeLabel(type) {
+        const labels = {
+          summary: '摘要',
+          pros_cons: '优缺点',
+          faq: 'FAQ',
+          comparison: '对比',
+          ranking: '排行榜',
+          scenario: '场景推荐'
+        };
+        return labels[type] || type;
+      },
+
+      statusClass(status) {
+        const classes = {
+          pending: 'bg-yellow-100 text-yellow-700',
+          generating: 'bg-blue-100 text-blue-700',
+          completed: 'bg-green-100 text-green-700',
+          failed: 'bg-red-100 text-red-700'
+        };
+        return classes[status] || 'bg-gray-100 text-gray-700';
+      },
+
+      statusLabel(status) {
+        const labels = {
+          pending: '待审核',
+          generating: '生成中',
+          completed: '已完成',
+          failed: '失败'
+        };
+        return labels[status] || status;
+      },
+
+      scoreColorClass(score) {
+        if (score >= 80) return 'bg-green-500';
+        if (score >= 60) return 'bg-yellow-500';
+        if (score >= 40) return 'bg-orange-500';
+        return 'bg-red-500';
+      },
+
+      scoreTextColorClass(score) {
+        if (score >= 80) return 'text-green-600';
+        if (score >= 60) return 'text-yellow-600';
+        if (score >= 40) return 'text-orange-600';
+        return 'text-red-600';
+      },
+
+      formatDate(dateStr) {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleString('zh-CN');
+      },
+
+      viewContent(content) {
+        this.selectedContent = content;
+        this.viewModal = true;
+      },
+
+      async approveContent(content) {
+        try {
+          const res = await fetch('/api/ai-content/' + content.id + '/approve', { method: 'POST' });
+          if (res.ok) {
+            await this.loadContents();
+            await this.loadStats();
+          } else {
+            alert('操作失败');
+          }
+        } catch(e) { alert('操作失败: ' + e.message); }
+      },
+
+      async rejectContent(content) {
+        try {
+          const res = await fetch('/api/ai-content/' + content.id + '/reject', { method: 'POST' });
+          if (res.ok) {
+            await this.loadContents();
+            await this.loadStats();
+          } else {
+            alert('操作失败');
+          }
+        } catch(e) { alert('操作失败: ' + e.message); }
+      },
+
+      async regenerateContent(content) {
+        try {
+          const res = await fetch('/api/ai-content/' + content.id + '/regenerate', { method: 'POST' });
+          if (res.ok) {
+            await this.loadContents();
+            await this.loadStats();
+          } else {
+            alert('重新生成失败');
+          }
+        } catch(e) { alert('重新生成失败: ' + e.message); }
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

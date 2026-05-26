@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>媒体设置 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="mediaSettings">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-4xl mx-auto">
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">🖼️ 媒体设置</h1>
+          <p class="text-gray-500 mt-1">配置图片加载和格式优化选项</p>
+        </div>
+
+        <!-- Lazy Loading Settings -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">图片懒加载</h2>
+              <p class="text-sm text-gray-500 mt-1">使用 Intersection Observer 延迟加载图片，提升页面性能</p>
+            </div>
+            <button @click="toggleLazyLoading" class="relative w-14 h-7 rounded-full transition-colors" :class="settings.lazyLoadingEnabled ? 'bg-blue-600' : 'bg-gray-300'">
+              <span class="absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform" :class="settings.lazyLoadingEnabled ? 'translate-x-7' : ''"></span>
+            </button>
+          </div>
+
+          <div x-show="settings.lazyLoadingEnabled" class="mt-4 space-y-4">
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p class="font-medium text-gray-700">占位符效果</p>
+                <p class="text-sm text-gray-500">图片加载前显示模糊占位符</p>
+              </div>
+              <button @click="settings.placeholderEnabled = !settings.placeholderEnabled" class="relative w-12 h-6 rounded-full transition-colors" :class="settings.placeholderEnabled ? 'bg-blue-600' : 'bg-gray-300'">
+                <span class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform" :class="settings.placeholderEnabled ? 'translate-x-6' : ''"></span>
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p class="font-medium text-gray-700">淡入动画</p>
+                <p class="text-sm text-gray-500">图片加载完成后淡入显示</p>
+              </div>
+              <button @click="settings.fadeInEnabled = !settings.fadeInEnabled" class="relative w-12 h-6 rounded-full transition-colors" :class="settings.fadeInEnabled ? 'bg-blue-600' : 'bg-gray-300'">
+                <span class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform" :class="settings.fadeInEnabled ? 'translate-x-6' : ''"></span>
+              </button>
+            </div>
+
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <label class="block font-medium text-gray-700 mb-2">预加载距离 (px)</label>
+              <p class="text-sm text-gray-500 mb-3">图片距离视口多少像素时开始加载</p>
+              <input type="number" x-model.number="settings.preloadDistance" min="0" max="1000" step="50" class="w-32 px-3 py-2 border rounded-lg" />
+            </div>
+          </div>
+        </div>
+
+        <!-- WebP Adaptive Settings -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">WebP 自适应</h2>
+              <p class="text-sm text-gray-500 mt-1">自动检测浏览器支持，为支持 WebP 的浏览器提供更小体积的图片</p>
+            </div>
+            <button @click="toggleWebP" class="relative w-14 h-7 rounded-full transition-colors" :class="settings.webPEnabled ? 'bg-blue-600' : 'bg-gray-300'">
+              <span class="absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform" :class="settings.webPEnabled ? 'translate-x-7' : ''"></span>
+            </button>
+          </div>
+
+          <div x-show="settings.webPEnabled" class="mt-4">
+            <div class="p-4 bg-gray-50 rounded-lg mb-4">
+              <p class="font-medium text-gray-700 mb-2">当前浏览器状态</p>
+              <div class="flex items-center space-x-4">
+                <span class="px-3 py-1 rounded text-sm" :class="browserSupportsWebP ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'">
+                  <span x-text="browserSupportsWebP ? '✓ 支持 WebP' : '✗ 不支持 WebP'"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="p-4 bg-gray-50 rounded-lg">
+              <label class="block font-medium text-gray-700 mb-2">CDN 转换参数</label>
+              <p class="text-sm text-gray-500 mb-3">图片 URL 添加的参数，用于触发 CDN 格式转换（留空使用默认）</p>
+              <input type="text" x-model="settings.cdnWebPParam" placeholder="?format=webp 或 &format=webp" class="w-full px-3 py-2 border rounded-lg" />
+            </div>
+
+            <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p class="text-sm text-blue-800">
+                <strong>提示：</strong>WebP 格式图片比 JPEG/PNG 小 25-35%，可显著提升页面加载速度。
+                Cloudflare R2/CF Images 等 CDN 通常支持添加 <code>?format=webp</code> 参数自动转换。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Button -->
+        <div class="flex justify-end">
+          <button @click="saveSettings" :disabled="saving" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+            <span x-text="saving ? '保存中...' : '保存设置'"></span>
+          </button>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mt-6">
+          <h2 class="text-lg font-semibold mb-4">效果预览</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <template x-for="(img, index) in previewImages" :key="index">
+              <div class="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                <img
+                  :data-src="img.src"
+                  :src="settings.lazyLoadingEnabled ? 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 9\'%3E%3Crect fill=\'%23e5e7eb\' width=\'16\' height=\'9\'/%3E%3C/svg%3E' : img.src"
+                  :class="[
+                    'w-full h-full object-cover transition-opacity duration-500',
+                    settings.fadeInEnabled ? 'opacity-0' : 'opacity-100',
+                    settings.placeholderEnabled && settings.lazyLoadingEnabled ? 'lazy-placeholder' : ''
+                  ]"
+                  :loading="settings.lazyLoadingEnabled ? 'lazy' : 'eager'"
+                  :alt="img.alt"
+                />
+                <div class="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+                  <span x-text="img.label"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('mediaSettings', () => ({
+        settings: {
+          lazyLoadingEnabled: true,
+          placeholderEnabled: true,
+          fadeInEnabled: true,
+          preloadDistance: 200,
+          webPEnabled: true,
+          cdnWebPParam: '?format=webp'
+        },
+        browserSupportsWebP: false,
+        saving: false,
+        previewImages: [
+          { src: 'https://picsum.photos/400/300?random=1', alt: 'Sample Image 1', label: 'Sample 1' },
+          { src: 'https://picsum.photos/400/300?random=2', alt: 'Sample Image 2', label: 'Sample 2' },
+          { src: 'https://picsum.photos/400/300?random=3', alt: 'Sample Image 3', label: 'Sample 3' }
+        ],
+
+        async init() {
+          await this.loadSettings();
+          this.checkWebPSupport();
+        },
+
+        async loadSettings() {
+          try {
+            const res = await fetch('/api/media/settings');
+            if (res.ok) {
+              const data = await res.json();
+              this.settings = { ...this.settings, ...data };
+            }
+          } catch (e) {
+            console.error('Failed to load settings:', e);
+          }
+        },
+
+        async saveSettings() {
+          this.saving = true;
+          try {
+            const res = await fetch('/api/media/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.settings)
+            });
+            if (res.ok) {
+              this.showNotification('设置已保存', 'success');
+            } else {
+              this.showNotification('保存失败', 'error');
+            }
+          } catch (e) {
+            console.error('Failed to save settings:', e);
+            this.showNotification('保存失败', 'error');
+          }
+          this.saving = false;
+        },
+
+        toggleLazyLoading() {
+          this.settings.lazyLoadingEnabled = !this.settings.lazyLoadingEnabled;
+        },
+
+        toggleWebP() {
+          this.settings.webPEnabled = !this.settings.webPEnabled;
+        },
+
+        checkWebPSupport() {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1;
+          canvas.height = 1;
+          this.browserSupportsWebP = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+        },
+
+        showNotification(message, type) {
+          const colors = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+          const notification = document.createElement('div');
+          notification.className = `fixed top-4 right-4 px-4 py-2 ${colors} text-white rounded-lg shadow-lg z-50`;
+          notification.textContent = message;
+          document.body.appendChild(notification);
+          setTimeout(() => notification.remove(), 3000);
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

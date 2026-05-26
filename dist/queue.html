@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>队列监控 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="queueMonitor">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">📋 队列监控</h1>
+            <p class="text-gray-500 mt-1">实时监控内容生成任务队列</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button @click="loadQueue" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+            <button @click="clearFailed" x-show="failedJobs.length > 0" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">清空失败任务</button>
+          </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">待处理</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="stats.pending">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">处理中</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.processing">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已完成</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.completed">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">失败</div>
+            <div class="text-3xl font-bold text-red-600" x-text="stats.failed">-</div>
+          </div>
+        </div>
+
+        <!-- Performance Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">平均处理时间</div>
+            <div class="text-xl font-bold" x-text="formatDuration(stats.avgDurationMs)">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">今日完成</div>
+            <div class="text-xl font-bold text-green-600" x-text="stats.todayCompleted">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">队列积压预警</div>
+            <div class="text-xl font-bold" :class="stats.pending > 20 ? 'text-red-600' : 'text-green-600'" x-text="stats.pending > 20 ? '⚠️ 积压严重' : '✅ 正常'">-</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex space-x-4 mb-6 border-b">
+          <button @click="activeTab = 'pending'" :class="activeTab === 'pending' ? 'border-blue-600 text-blue-600' : 'text-gray-500'" class="pb-2 px-4 border-b-2 font-medium">
+            待处理 (<span x-text="pendingJobs.length"></span>)
+          </button>
+          <button @click="activeTab = 'processing'" :class="activeTab === 'processing' ? 'border-blue-600 text-blue-600' : 'text-gray-500'" class="pb-2 px-4 border-b-2 font-medium">
+            处理中 (<span x-text="processingJobs.length"></span>)
+          </button>
+          <button @click="activeTab = 'completed'" :class="activeTab === 'completed' ? 'border-blue-600 text-blue-600' : 'text-gray-500'" class="pb-2 px-4 border-b-2 font-medium">
+            已完成
+          </button>
+          <button @click="activeTab = 'failed'" :class="activeTab === 'failed' ? 'border-blue-600 text-blue-600' : 'text-gray-500'" class="pb-2 px-4 border-b-2 font-medium">
+            失败 (<span x-text="failedJobs.length"></span>)
+          </button>
+        </div>
+
+        <!-- Jobs List -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">任务ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">进度</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">耗时</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <template x-for="job in filteredJobs" :key="job.id">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4 font-mono text-sm" x-text="job.id.substring(0, 12) + '...'"></td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded" :class="typeClass(job.type)" x-text="typeLabel(job.type)"></span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded" :class="statusClass(job.status)" x-text="statusLabel(job.status)"></span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div x-show="job.status === 'processing'" class="w-24 bg-gray-200 rounded-full h-2">
+                      <div class="bg-blue-600 h-2 rounded-full transition-all" :style="'width: ' + (job.progress || 0) + '%'"></div>
+                    </div>
+                    <span x-show="job.status !== 'processing'" class="text-gray-400">-</span>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDateTime(job.createdAt)"></td>
+                  <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDuration(job.durationMs)"></td>
+                  <td class="px-6 py-4">
+                    <div class="flex space-x-2">
+                      <button @click="viewJobDetails(job)" class="text-blue-600 hover:underline text-sm">详情</button>
+                      <button x-show="job.status === 'pending' || job.status === 'processing'" @click="cancelJob(job.id)" class="text-red-600 hover:underline text-sm">取消</button>
+                      <button x-show="job.status === 'failed'" @click="retryJob(job.id)" class="text-green-600 hover:underline text-sm">重试</button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="filteredJobs.length === 0" class="text-center py-12 text-gray-500">
+            <span class="text-4xl mb-2 block">📭</span>
+            暂无任务
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Job Details Modal -->
+    <div x-show="showDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-lg">
+        <h2 class="text-xl font-bold mb-4">任务详情</h2>
+        <div x-show="selectedJob" class="space-y-4">
+          <div>
+            <label class="text-sm text-gray-500">任务ID</label>
+            <p class="font-mono text-sm" x-text="selectedJob?.id"></p>
+          </div>
+          <div>
+            <label class="text-sm text-gray-500">类型</label>
+            <p x-text="selectedJob?.type"></p>
+          </div>
+          <div>
+            <label class="text-sm text-gray-500">状态</label>
+            <p x-text="selectedJob?.status"></p>
+          </div>
+          <div x-show="selectedJob?.error">
+            <label class="text-sm text-gray-500">错误信息</label>
+            <p class="text-red-600 text-sm" x-text="selectedJob?.error"></p>
+          </div>
+          <div x-show="selectedJob?.result">
+            <label class="text-sm text-gray-500">结果</label>
+            <pre class="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-40" x-text="JSON.stringify(selectedJob?.result, null, 2)"></pre>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6">
+          <button @click="showDetailsModal = false" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('queueMonitor', () => ({
+        pendingJobs: [],
+        processingJobs: [],
+        completedJobs: [],
+        failedJobs: [],
+        stats: { pending: 0, processing: 0, completed: 0, failed: 0, avgDurationMs: 0, todayCompleted: 0 },
+        activeTab: 'pending',
+        loading: true,
+        showDetailsModal: false,
+        selectedJob: null,
+
+        get filteredJobs() {
+          switch (this.activeTab) {
+            case 'pending': return this.pendingJobs;
+            case 'processing': return this.processingJobs;
+            case 'completed': return this.completedJobs;
+            case 'failed': return this.failedJobs;
+            default: return [];
+          }
+        },
+
+        async init() {
+          await this.loadQueue();
+          setInterval(() => this.loadQueue(), 15000);
+        },
+
+        async loadQueue() {
+          try {
+            const res = await fetch('/api/content/jobs');
+            if (res.ok) {
+              const data = await res.json();
+              this.pendingJobs = data.jobs?.filter(j => j.status === 'pending') || [];
+              this.processingJobs = data.jobs?.filter(j => j.status === 'processing') || [];
+              this.completedJobs = data.jobs?.filter(j => j.status === 'completed') || [];
+              this.failedJobs = data.jobs?.filter(j => j.status === 'failed') || [];
+              this.stats = data.summary || this.stats;
+            }
+          } catch (e) { console.error('Failed to load queue:', e); }
+        },
+
+        async cancelJob(jobId) {
+          if (!confirm('确定要取消这个任务吗？')) return;
+          try {
+            await fetch(`/api/content/jobs/${jobId}/cancel`, { method: 'POST' });
+            await this.loadQueue();
+          } catch (e) { console.error('Failed to cancel job:', e); }
+        },
+
+        async retryJob(jobId) {
+          try {
+            await fetch(`/api/content/jobs/${jobId}/retry`, { method: 'POST' });
+            await this.loadQueue();
+          } catch (e) { console.error('Failed to retry job:', e); }
+        },
+
+        async clearFailed() {
+          if (!confirm('确定要清空所有失败任务吗？')) return;
+          try {
+            await fetch('/api/content/jobs/clear-failed', { method: 'POST' });
+            await this.loadQueue();
+          } catch (e) { console.error('Failed to clear failed jobs:', e); }
+        },
+
+        viewJobDetails(job) {
+          this.selectedJob = job;
+          this.showDetailsModal = true;
+        },
+
+        formatDateTime(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleString('zh-CN');
+        },
+
+        formatDuration(ms) {
+          if (!ms) return '-';
+          if (ms < 1000) return ms + 'ms';
+          if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+          return (ms / 60000).toFixed(1) + 'm';
+        },
+
+        statusClass(status) {
+          return { pending: 'bg-blue-100 text-blue-800', processing: 'bg-yellow-100 text-yellow-800', completed: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800', cancelled: 'bg-gray-100 text-gray-800' }[status] || 'bg-gray-100';
+        },
+
+        statusLabel(status) {
+          return { pending: '待处理', processing: '处理中', completed: '完成', failed: '失败', cancelled: '已取消' }[status] || status;
+        },
+
+        typeClass(type) {
+          return { post_generation: 'bg-purple-100 text-purple-800', entity_mining: 'bg-green-100 text-green-800', bulk_generation: 'bg-orange-100 text-orange-800', ai_fingerprint: 'bg-red-100 text-red-800' }[type] || 'bg-gray-100';
+        },
+
+        typeLabel(type) {
+          return { post_generation: '文章生成', entity_mining: '实体挖掘', bulk_generation: '批量生成', ai_fingerprint: 'AI检测' }[type] || type;
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

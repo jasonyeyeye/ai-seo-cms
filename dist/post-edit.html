@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑文章 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    .toc-level-1 { padding-left: 0.5rem; font-weight: 600; }
+    .toc-level-2 { padding-left: 1rem; }
+    .toc-level-3 { padding-left: 1.5rem; }
+    .toc-level-4 { padding-left: 2rem; }
+    .toc-level-5 { padding-left: 2.5rem; }
+    .toc-level-6 { padding-left: 3rem; }
+    #toc-sidebar { box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+    #toc-nav a { scroll-margin-top: 6rem; }
+
+    /* Preview Panel Styles */
+    #preview-panel {
+      width: 45%;
+      max-width: 800px;
+      transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+    }
+    #preview-panel.hidden-panel {
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    #preview-panel.visible-panel {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    #editor-area {
+      transition: margin-right 0.3s ease-in-out;
+    }
+    #editor-area.expanded {
+      margin-right: 0;
+    }
+    #editor-area.with-preview {
+      margin-right: 45%;
+    }
+
+    /* Preview Content Styles - matching published article style */
+    #preview-content {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.8;
+      color: #333;
+    }
+    #preview-content h1 { font-size: 2em; font-weight: 700; margin: 1em 0 0.5em; line-height: 1.3; }
+    #preview-content h2 { font-size: 1.5em; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.4; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+    #preview-content h3 { font-size: 1.25em; font-weight: 600; margin: 1em 0 0.5em; }
+    #preview-content h4 { font-size: 1.1em; font-weight: 600; margin: 1em 0 0.5em; }
+    #preview-content p { margin: 1em 0; }
+    #preview-content a { color: #2563eb; text-decoration: underline; }
+    #preview-content a:hover { color: #1d4ed8; }
+    #preview-content img { max-width: 100%; height: auto; margin: 1em 0; border-radius: 8px; }
+    #preview-content ul, #preview-content ol { margin: 1em 0; padding-left: 2em; }
+    #preview-content li { margin: 0.5em 0; }
+    #preview-content blockquote { border-left: 4px solid #ddd; margin: 1em 0; padding: 0.5em 1em; background: #f9f9f9; color: #555; }
+    #preview-content pre { background: #f4f4f4; padding: 1em; border-radius: 4px; overflow-x: auto; margin: 1em 0; }
+    #preview-content code { font-family: "SF Mono", Monaco, Consolas, monospace; background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+    #preview-content pre code { background: none; padding: 0; }
+    #preview-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    #preview-content th, #preview-content td { border: 1px solid #ddd; padding: 0.75em; text-align: left; }
+    #preview-content th { background: #f4f4f4; font-weight: 600; }
+    #preview-content hr { border: none; border-top: 1px solid #ddd; margin: 2em 0; }
+
+    /* Editor textarea synchronized scroll */
+    #content-editor {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    #content-editor::-webkit-scrollbar { width: 8px; }
+    #content-editor::-webkit-scrollbar-track { background: transparent; }
+    #content-editor::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    /* Preview panel scrollbar */
+    #preview-scroll-container {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    #preview-scroll-container::-webkit-scrollbar { width: 8px; }
+    #preview-scroll-container::-webkit-scrollbar-track { background: transparent; }
+    #preview-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    /* Toggle preview button */
+    #toggle-preview-btn {
+      position: relative;
+    }
+    #toggle-preview-btn .shortcut-hint {
+      font-size: 10px;
+      color: #9ca3af;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="postEdit">
+    {{ include('partials/admin-sidebar') }}
+
+    <!-- TOC Sidebar -->
+    <aside id="toc-sidebar" class="fixed right-0 top-0 h-full w-[230px] bg-white border-l border-gray-200 z-40 transform transition-transform duration-300"
+          :class="{ 'translate-x-full': !tocSidebarOpen }">
+      <div class="flex flex-col h-full">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+          <h3 class="font-semibold text-gray-700 text-sm">文章目录</h3>
+          <button @click="toggleTocSidebar" class="p-1 hover:bg-gray-200 rounded" title="隐藏目录">
+            <span class="text-gray-600">→</span>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-3">
+          <nav id="toc-nav">
+            <template x-if="tocItems.length === 0">
+              <p class="text-sm text-gray-500 italic">暂无目录</p>
+            </template>
+            <template x-for="item in tocItems" :key="item.id">
+              <a :href="'#' + item.id"
+                 class="toc-item block py-1.5 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded px-2 mb-0.5 transition-colors"
+                 :class="'toc-level-' + item.level"
+                 :data-id="item.id"
+                 x-text="item.text"></a>
+            </template>
+          </nav>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Preview Panel (Right Side) -->
+    <aside id="preview-panel"
+           class="fixed right-0 top-0 h-full bg-white border-l border-gray-200 z-30 hidden-panel"
+           x-show="previewPanelVisible"
+           x-transition:enter="transition ease-in-out duration-300"
+           x-transition:enter-start="transform translate-x-full opacity-0"
+           x-transition:enter-end="transform translate-x-0 opacity-100"
+           x-transition:leave="transition ease-in-out duration-300"
+           x-transition:leave-start="transform translate-x-0 opacity-100"
+           x-transition:leave-end="transform translate-x-full opacity-0">
+      <div class="flex flex-col h-full">
+        <!-- Preview Header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+          <div class="flex items-center space-x-2">
+            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+            </svg>
+            <h3 class="font-semibold text-gray-700 text-sm">实时预览</h3>
+            <span class="text-xs text-gray-400" x-show="isRealtimePreview">● 实时</span>
+          </div>
+          <button @click="togglePreviewPanel" class="p-1 hover:bg-gray-200 rounded" title="关闭预览 (Ctrl+P)">
+            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <!-- Preview Content -->
+        <div id="preview-scroll-container" class="flex-1 overflow-y-auto p-6">
+          <div id="preview-content" class="prose max-w-none" x-html="renderedPreviewContent"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Toggle Preview Button -->
+    <button id="toggle-preview-btn"
+            @click="togglePreviewPanel"
+            class="fixed right-4 z-50 p-2 border rounded-lg shadow-sm hover:bg-gray-50 transition"
+            title="切换实时预览 (Ctrl+P)"
+            :class="previewPanelVisible ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700' : 'bg-white text-blue-600 border-gray-300'">
+      <div class="flex items-center space-x-1">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+        </svg>
+        <span class="text-sm font-medium">预览</span>
+        <span class="shortcut-hint" :class="previewPanelVisible ? 'text-blue-200' : 'text-gray-400'">Ctrl+P</span>
+      </div>
+    </button>
+
+    <main id="editor-area"
+          class="flex-1 p-8 transition-all duration-300"
+          :class="previewPanelVisible ? 'with-preview' : 'expanded'">
+      <!-- Breadcrumb -->
+      <nav class="mb-4 text-sm">
+        <ol class="flex items-center space-x-2">
+          <li><a href="/admin" class="text-blue-600 hover:underline">首页</a></li>
+          <li class="text-gray-400">›</li>
+          <li><a href="/admin/posts" class="text-blue-600 hover:underline">文章管理</a></li>
+          <li class="text-gray-400">›</li>
+          <li class="text-gray-600" x-text="post.id ? '编辑文章' : '新建文章'"></li>
+        </ol>
+      </nav>
+      <div class="max-w-4xl mx-auto" :class="previewPanelVisible ? 'mr-[45%]' : ''">
+        <div class="mb-6">
+          <a href="/admin/posts" class="text-blue-600 hover:underline">← 返回文章列表</a>
+        </div>
+
+        <!-- Batch Generation Progress -->
+        <div x-show="batchGenerating" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <h2 class="text-lg font-semibold mb-4">批量生成进度</h2>
+          <div class="mb-4">
+            <div class="flex justify-between text-sm mb-2">
+              <span x-text="batchMessage"></span>
+              <span><span x-text="batchProgress.completed"></span> / <span x-text="batchProgress.total"></span></span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+              <div
+                class="bg-blue-600 h-3 rounded-full transition-all"
+                :style="'width: ' + (batchProgress.total > 0 ? (batchProgress.completed / batchProgress.total * 100) : 0) + '%'">
+              </div>
+            </div>
+          </div>
+          <div class="space-y-2 max-h-40 overflow-y-auto">
+            <template x-for="result in batchResults" :key="result.slug || result.error">
+              <div class="flex items-center justify-between py-2 px-3 rounded" :class="result.error ? 'bg-red-50' : 'bg-green-50'">
+                <span class="text-sm" :class="result.error ? 'text-red-700' : 'text-green-700'" x-text="result.error || result.title || result.slug"></span>
+                <span x-show="result.slug" class="text-xs text-gray-500">已完成</span>
+                <span x-show="result.error" class="text-xs text-red-500">失败</span>
+              </div>
+            </template>
+          </div>
+          <div class="mt-4 flex justify-end">
+            <button @click="cancelBatch" x-show="batchProgress.status === 'processing'" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">取消</button>
+            <button @click="closeBatch" x-show="batchProgress.status === 'completed' || batchProgress.status === 'cancelled'" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">关闭</button>
+          </div>
+        </div>
+
+        <!-- Batch Generate Form -->
+        <div x-show="!post.id && !batchGenerating" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <h2 class="text-lg font-semibold mb-4">批量生成文章</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">关键词 (每行一个)</label>
+              <textarea x-model="batchKeywords" rows="6" placeholder="关键词1&#10;关键词2&#10;关键词3" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+            </div>
+            <div class="flex items-center space-x-4">
+              <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-2">内容类型</label>
+                <select x-model="batchContentType" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="article">文章</option>
+                  <option value="review">评测</option>
+                  <option value="comparison">对比</option>
+                  <option value="guide">指南</option>
+                </select>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-2">目标字数</label>
+                <input type="number" x-model="batchTargetWordCount" value="1200" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">实体Slug</label>
+              <input type="text" x-model="batchEntitySlug" placeholder="entity-slug" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button @click="startBatchGenerate" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">开始批量生成</button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-8">
+          <h1 class="text-2xl font-bold text-gray-900 mb-6" x-text="post.id ? '编辑文章' : '新建文章'"></h1>
+
+          <form @submit.prevent="savePost" class="space-y-6">
+            <!-- Title Field -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">标题 *</label>
+              <input type="text" x-model="post.title" @input="clearFieldError('title'); updatePreview()" required
+                class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :class="errors.title ? 'border-red-500' : ''" />
+              <p x-show="errors.title" class="text-red-500 text-sm mt-1" x-text="errors.title"></p>
+            </div>
+
+            <!-- Slug Field -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Slug *</label>
+              <input type="text" x-model="post.slug" @input="clearFieldError('slug'); validateSlug()" required
+                class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                :class="errors.slug ? 'border-red-500' : ''"
+                placeholder="my-article-slug" />
+              <p x-show="errors.slug" class="text-red-500 text-sm mt-1" x-text="errors.slug"></p>
+              <p class="text-xs text-gray-500 mt-1">小写字母、数字和连字符，如 "my-article-slug"</p>
+            </div>
+
+            <!-- Status Field -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">状态</label>
+              <select x-model="post.status" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="draft">草稿</option>
+                <option value="published">已发布</option>
+                <option value="noindex">noindex</option>
+                <option value="archived">已归档</option>
+              </select>
+            </div>
+
+            <!-- Content Field with Realtime Preview -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-gray-700">内容 (Markdown)</label>
+                <span class="text-xs text-gray-400">支持 Markdown 语法，编辑内容实时同步到右侧预览</span>
+              </div>
+              <textarea
+                id="content-editor"
+                x-model="post.contentMd"
+                @input="debouncedUpdatePreview"
+                @scroll="syncPreviewScroll"
+                rows="20"
+                class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
+                placeholder="在这里输入 Markdown 内容..."></textarea>
+            </div>
+
+            <!-- Form-level Error -->
+            <div x-show="formError" class="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p class="text-red-600" x-text="formError"></p>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t">
+              <div x-show="post.id" class="text-sm text-gray-500">
+                创建于: <span x-text="formatDate(post.createdAt)"></span>
+              </div>
+              <div class="flex space-x-3">
+                <button type="button" @click="togglePreviewPanel" class="px-4 py-2 border rounded-lg hover:bg-gray-50" :class="previewPanelVisible ? 'bg-blue-50 border-blue-300' : ''">
+                  <span x-text="previewPanelVisible ? '隐藏预览' : '显示预览'"></span>
+                </button>
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Fallback Preview (for modal-like view) -->
+        <div x-show="previewContent && !previewPanelVisible" class="mt-6 bg-white rounded-xl shadow-sm p-8">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">HTML 预览</h2>
+            <button @click="previewContent = ''" class="text-gray-500 hover:text-gray-700">关闭</button>
+          </div>
+          <div class="border p-4 bg-gray-50 max-h-96 overflow-y-auto">
+            <div id="preview-content-static" x-html="previewContent" class="prose"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      const postId = window.location.pathname.split('/')[3];
+      let previewDebounceTimer = null;
+
+      Alpine.data('postEdit', () => ({
+        post: { id: null, title: '', slug: '', status: 'draft', contentMd: '', createdAt: null },
+        loading: true,
+        previewContent: '',
+        renderedPreviewContent: '',
+        errors: {},
+        formError: '',
+        batchGenerating: false,
+        batchKeywords: '',
+        batchContentType: 'article',
+        batchTargetWordCount: 1200,
+        batchEntitySlug: '',
+        batchProgress: { total: 0, completed: 0, status: '' },
+        batchMessage: '',
+        batchResults: [],
+        eventSource: null,
+        tocSidebarOpen: true,
+        previewPanelVisible: true,
+        isRealtimePreview: true,
+
+        async init() {
+          if (postId && postId !== 'new') {
+            try {
+              const res = await fetch(`/api/content/posts/${postId}`);
+              if (res.ok) {
+                this.post = await res.json();
+                this.updatePreview();
+              }
+            } catch (e) {
+              console.error('Failed to load post:', e);
+            }
+          } else {
+            this.updatePreview();
+          }
+          this.loading = false;
+
+          // Watch content changes to update preview
+          this.$watch('post.contentMd', () => {
+            this.debouncedUpdatePreview();
+          });
+
+          // Setup keyboard shortcut for preview toggle
+          document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'p') {
+              e.preventDefault();
+              this.togglePreviewPanel();
+            }
+          });
+        },
+
+        togglePreviewPanel() {
+          this.previewPanelVisible = !this.previewPanelVisible;
+          const panel = document.getElementById('preview-panel');
+          const editorArea = document.getElementById('editor-area');
+
+          if (panel) {
+            panel.classList.toggle('hidden-panel', !this.previewPanelVisible);
+            panel.classList.toggle('visible-panel', this.previewPanelVisible);
+          }
+
+          if (editorArea) {
+            editorArea.classList.toggle('with-preview', this.previewPanelVisible);
+            editorArea.classList.toggle('expanded', !this.previewPanelVisible);
+          }
+        },
+
+        updatePreview() {
+          const content = this.post.contentMd || '';
+          // Parse markdown to HTML
+          if (typeof marked !== 'undefined') {
+            this.renderedPreviewContent = marked.parse(content);
+          } else {
+            this.renderedPreviewContent = '<p>' + content.replace(/\n/g, '<br>') + '</p>';
+          }
+          this.isRealtimePreview = true;
+        },
+
+        debouncedUpdatePreview() {
+          if (previewDebounceTimer) {
+            clearTimeout(previewDebounceTimer);
+          }
+          previewDebounceTimer = setTimeout(() => {
+            this.updatePreview();
+          }, 150); // 150ms debounce for smoother typing
+        },
+
+        syncPreviewScroll(e) {
+          if (!this.previewPanelVisible) return;
+
+          const editor = e.target;
+          const previewContainer = document.getElementById('preview-scroll-container');
+          if (!previewContainer) return;
+
+          // Calculate scroll percentage
+          const scrollPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+
+          // Apply same percentage to preview
+          const previewScrollTop = scrollPercentage * (previewContainer.scrollHeight - previewContainer.clientHeight);
+          previewContainer.scrollTop = previewScrollTop;
+        },
+
+        toggleTocSidebar() {
+          this.tocSidebarOpen = !this.tocSidebarOpen;
+          const sidebar = document.getElementById('toc-sidebar');
+          if (sidebar) {
+            sidebar.classList.toggle('translate-x-full', !this.tocSidebarOpen);
+          }
+        },
+
+        generateToc() {
+          const content = this.post.contentMd || '';
+          const tocNav = document.getElementById('toc-nav');
+          if (!tocNav) return;
+
+          // Parse markdown headers
+          const headerRegex = /^(#{1,6})\s+(.+)$/gm;
+          const items = [];
+          let match;
+          let counter = 0;
+
+          while ((match = headerRegex.exec(content)) !== null) {
+            const level = match[1].length;
+            const text = match[2].trim();
+            const id = 'toc-' + counter++;
+            items.push({ level, text, id });
+          }
+
+          this.tocItems = items;
+
+          // Add IDs to headers in preview content
+          setTimeout(() => {
+            this.updatePreviewHeaders();
+            this.setupScrollSpy();
+          }, 100);
+        },
+
+        updatePreviewHeaders() {
+          const previewEl = document.querySelector('#preview-content');
+          if (previewEl) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(previewEl.innerHTML, 'text/html');
+            let counter = 0;
+            doc.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(header => {
+              header.id = 'toc-' + counter++;
+            });
+            // Re-render with IDs
+            this.renderedPreviewContent = doc.body.innerHTML;
+          }
+        },
+
+        setupScrollSpy() {
+          const tocItems = document.querySelectorAll('.toc-item');
+          if (tocItems.length === 0) return;
+
+          const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                tocItems.forEach(item => item.classList.remove('text-blue-600', 'bg-blue-50', 'font-medium'));
+                const activeItem = document.querySelector(`.toc-item[data-id="${entry.target.id}"]`);
+                if (activeItem) {
+                  activeItem.classList.add('text-blue-600', 'bg-blue-50', 'font-medium');
+                }
+              }
+            });
+          }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+
+          document.querySelectorAll('#preview-content h1, #preview-content h2, #preview-content h3, #preview-content h4, #preview-content h5, #preview-content h6').forEach(header => {
+            observer.observe(header);
+          });
+        },
+
+        validateSlug() {
+          const slug = this.post.slug || '';
+          if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+            this.errors.slug = 'Slug 只能包含小写字母、数字和连字符';
+          } else {
+            delete this.errors.slug;
+          }
+        },
+
+        clearFieldError(field) {
+          delete this.errors[field];
+          this.formError = '';
+        },
+
+        async savePost() {
+          this.errors = {};
+          this.formError = '';
+
+          // Frontend validation
+          if (!this.post.title || !this.post.title.trim()) {
+            this.errors.title = '标题不能为空';
+            return;
+          }
+          if (!this.post.slug || !this.post.slug.trim()) {
+            this.errors.slug = 'Slug不能为空';
+            return;
+          }
+          if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(this.post.slug)) {
+            this.errors.slug = 'Slug 只能包含小写字母、数字和连字符（如 my-article-slug）';
+            return;
+          }
+
+          try {
+            const method = this.post.id ? 'PUT' : 'POST';
+            const url = this.post.id ? `/api/content/posts/${this.post.id}` : '/api/content/posts';
+            const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.post)
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+              if (!this.post.id && data.post?.id) {
+                this.post.id = data.post.id;
+                history.replaceState({}, '', `/admin/posts/${data.post.id}/edit`);
+              }
+              alert('保存成功');
+            } else if (data.error === 'Validation failed' && data.details) {
+              // Handle validation errors from backend
+              for (const detail of data.details) {
+                if (detail.toLowerCase().includes('slug')) {
+                  this.errors.slug = detail;
+                } else if (detail.toLowerCase().includes('title')) {
+                  this.errors.title = detail;
+                } else {
+                  this.formError = detail;
+                }
+              }
+            } else {
+              this.formError = data.error || '保存失败';
+            }
+          } catch (e) {
+            console.error('Failed to save post:', e);
+            this.formError = '保存失败: ' + e.message;
+          }
+        },
+
+        previewHtml() {
+          this.previewContent = marked.parse(this.post.contentMd || '');
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        async startBatchGenerate() {
+          if (!this.batchKeywords.trim()) {
+            alert('请输入关键词');
+            return;
+          }
+
+          const keywords = this.batchKeywords.split('\n').map(k => k.trim()).filter(k => k);
+          if (keywords.length === 0) {
+            alert('请输入有效的关键词');
+            return;
+          }
+
+          const tasks = keywords.map(keyword => ({
+            keywords: [keyword],
+            primaryEntitySlug: this.batchEntitySlug || 'default',
+            styleTemplateId: 'default',
+            targetWordCount: parseInt(this.batchTargetWordCount) || 1200,
+            contentType: this.batchContentType,
+          }));
+
+          this.batchGenerating = true;
+          this.batchProgress = { total: tasks.length, completed: 0, status: 'processing' };
+          this.batchMessage = '准备开始...';
+          this.batchResults = [];
+
+          // Connect to SSE endpoint
+          try {
+            const response = await fetch('/api/content/batch-generate/stream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tasks }),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to start batch generation');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const text = decoder.decode(value);
+              const lines = text.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.substring(6));
+                    this.handleSSEEvent(data);
+                  } catch (e) {
+                    console.error('Failed to parse SSE data:', e);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Batch generation error:', e);
+            this.batchMessage = '错误: ' + e.message;
+            this.batchProgress.status = 'error';
+          }
+        },
+
+        handleSSEEvent(data) {
+          this.batchProgress = {
+            total: data.total,
+            completed: data.completed,
+            status: data.status,
+          };
+
+          if (data.message) {
+            this.batchMessage = data.message;
+          }
+
+          if (data.result) {
+            this.batchResults.push(data.result);
+          }
+
+          if (data.error) {
+            this.batchResults.push({ error: data.error });
+          }
+
+          if (data.status === 'completed' || data.status === 'cancelled') {
+            this.batchMessage = data.status === 'completed'
+              ? `完成！已生成 ${data.completed}/${data.total} 篇文章`
+              : '已取消';
+          }
+        },
+
+        cancelBatch() {
+          if (this.eventSource) {
+            this.eventSource.close();
+          }
+          this.batchProgress.status = 'cancelled';
+          this.batchMessage = '正在取消...';
+        },
+
+        closeBatch() {
+          this.batchGenerating = false;
+          this.batchResults = [];
+          this.batchProgress = { total: 0, completed: 0, status: '' };
+          this.batchMessage = '';
+        },
+      }));
+    });
+  </script>
+</body>
+</html>

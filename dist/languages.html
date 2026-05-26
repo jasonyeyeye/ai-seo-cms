@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>语言设置 - {{ siteName }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+  {{ include('partials/admin-sidebar.html') }}
+
+  <main class="flex-1 ml-0 md:ml-64 p-6" x-data="{ sidebarOpen: false }">
+    <div class="max-w-4xl mx-auto">
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">语言设置</h1>
+        <p class="text-gray-600 mt-1">管理多语言内容和GEO自动切换</p>
+      </div>
+
+      <!-- Language Configuration -->
+      <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">支持的语言</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" x-data="{ languages: [
+          { code: 'zh-CN', label: '中文', countries: 'CN, TW, HK, MO', enabled: true },
+          { code: 'en-US', label: 'English', countries: 'US, GB, CA, AU, NZ, EN', enabled: true },
+          { code: 'ja-JP', label: '日本語', countries: 'JP', enabled: true },
+          { code: 'ko-KR', label: '한국어', countries: 'KR', enabled: true }
+        ]}">
+          <template x-for="lang in languages" :key="lang.code">
+            <div class="border rounded-lg p-4" :class="lang.enabled ? 'border-green-200 bg-green-50' : 'border-gray-200'">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="font-medium text-gray-900" x-text="lang.label + ' (' + lang.code + ')'"></h3>
+                  <p class="text-sm text-gray-500 mt-1" x-text="'适用国家: ' + lang.countries"></p>
+                </div>
+                <span
+                  class="px-2 py-1 text-xs font-medium rounded-full"
+                  :class="lang.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+                  x-text="lang.enabled ? '已启用' : '已禁用'"
+                ></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- GEO Detection Settings -->
+      <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">GEO自动切换</h2>
+        <div class="space-y-4">
+          <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <h3 class="font-medium text-gray-900">CF-IPCountry 自动检测</h3>
+              <p class="text-sm text-gray-500 mt-1">根据Cloudflare CF-IPCountry header自动切换语言</p>
+            </div>
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">已启用</span>
+          </div>
+          <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <h3 class="font-medium text-gray-900">Accept-Language Fallback</h3>
+              <p class="text-sm text-gray-500 mt-1">当无法通过GEO检测时，参考浏览器Accept-Language</p>
+            </div>
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">已启用</span>
+          </div>
+          <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <h3 class="font-medium text-gray-900">手动语言切换</h3>
+              <p class="text-sm text-gray-500 mt-1">允许用户手动选择语言（通过Cookie和URL参数保存）</p>
+            </div>
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">已启用</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- hreflang Tags Preview -->
+      <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">hreflang 标签预览</h2>
+        <div class="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+          <pre class="text-sm text-green-400 whitespace-pre-wrap">&lt;link rel="alternate" hreflang="zh-CN" href="https://ai-seo-cms.pages.dev/" /&gt;
+&lt;link rel="alternate" hreflang="en" href="https://ai-seo-cms.pages.dev/" /&gt;
+&lt;link rel="alternate" hreflang="ja" href="https://ai-seo-cms.pages.dev/" /&gt;
+&lt;link rel="alternate" hreflang="ko" href="https://ai-seo-cms.pages.dev/" /&gt;
+&lt;link rel="alternate" hreflang="x-default" href="https://ai-seo-cms.pages.dev/" /&gt;</pre>
+        </div>
+      </div>
+
+      <!-- Language Detection Log -->
+      <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">语言检测优先级</h2>
+        <div class="space-y-2">
+          <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-medium text-sm">1</span>
+            <div>
+              <h3 class="font-medium text-gray-900">URL参数 ?lang=xx-XX</h3>
+              <p class="text-sm text-gray-500">最高优先级，允许链接分享特定语言版本</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-medium text-sm">2</span>
+            <div>
+              <h3 class="font-medium text-gray-900">Cookie language</h3>
+              <p class="text-sm text-gray-500">用户手动选择后保存，30天过期</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-medium text-sm">3</span>
+            <div>
+              <h3 class="font-medium text-gray-900">CF-IPCountry (GEO)</h3>
+              <p class="text-sm text-gray-500">Cloudflare数据中心国家代码，最准确</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-medium text-sm">4</span>
+            <div>
+              <h3 class="font-medium text-gray-900">Accept-Language</h3>
+              <p class="text-sm text-gray-500">浏览器语言设置作为最终fallback</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('sidebar', () => ({ sidebarOpen: false }));
+    });
+  </script>
+</body>
+</html>

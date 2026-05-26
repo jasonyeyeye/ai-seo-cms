@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SERP Competition Analysis - AI SEO CMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="max-w-7xl mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-6">SERP Competition Analysis</h1>
+
+    <!-- Keyword Input -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <div class="flex gap-4">
+        <input type="text" id="keywordInput" placeholder="Enter keyword to analyze..."
+               class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <button onclick="analyzeKeyword()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Analyze
+        </button>
+      </div>
+      <p class="text-sm text-gray-500 mt-2">Analyze top 10 SERP results for ranking features</p>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="hidden text-center py-12">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <p class="mt-4 text-gray-600">Analyzing SERP results...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden space-y-6">
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-gray-500 text-sm">Avg. Title Length</h3>
+          <p id="avgTitleLength" class="text-2xl font-bold text-blue-600">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-gray-500 text-sm">Avg. Content Length</h3>
+          <p id="avgContentLength" class="text-2xl font-bold text-green-600">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-gray-500 text-sm">Structured Data %</h3>
+          <p id="structuredDataPct" class="text-2xl font-bold text-orange-600">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-gray-500 text-sm">Top 10 Domains</h3>
+          <p id="uniqueDomains" class="text-2xl font-bold text-purple-600">-</p>
+        </div>
+      </div>
+
+      <!-- SERP Results Table -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold mb-4">Top 10 SERP Results</h2>
+        <table class="w-full">
+          <thead>
+            <tr class="text-left text-gray-500 text-sm border-b">
+              <th class="pb-3 w-12">#</th>
+              <th class="pb-3">Title</th>
+              <th class="pb-3 w-24">Title Len</th>
+              <th class="pb-3 w-24">Content</th>
+              <th class="pb-3 w-20">Schema</th>
+              <th class="pb-3">Domain</th>
+            </tr>
+          </thead>
+          <tbody id="serpTable">
+            <tr><td colspan="6" class="text-center text-gray-500 py-4">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Optimization Suggestions -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold mb-4">Optimization Suggestions</h2>
+        <div id="suggestions" class="space-y-3">
+          <div class="text-center text-gray-500 py-4">Loading suggestions...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-6 rounded-lg">
+      <p id="errorMessage">An error occurred</p>
+    </div>
+  </div>
+
+  <script>
+    async function analyzeKeyword() {
+      const keyword = document.getElementById('keywordInput').value.trim();
+      if (!keyword) {
+        alert('Please enter a keyword');
+        return;
+      }
+
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('errorState').classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/analytics/serp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.message || 'Analysis failed');
+        }
+
+        const data = await res.json();
+        displayResults(data);
+      } catch (error) {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('errorState').classList.remove('hidden');
+        document.getElementById('errorMessage').textContent = error.message;
+      }
+    }
+
+    function displayResults(data) {
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('resultsSection').classList.remove('hidden');
+
+      // Summary cards
+      document.getElementById('avgTitleLength').textContent = data.summary?.avgTitleLength || '-';
+      document.getElementById('avgContentLength').textContent = data.summary?.avgContentLength || '-';
+      document.getElementById('structuredDataPct').textContent = (data.summary?.structuredDataPct || 0) + '%';
+      document.getElementById('uniqueDomains').textContent = data.summary?.uniqueDomains || '-';
+
+      // SERP table
+      const tbody = document.getElementById('serpTable');
+      if (!data.results || data.results.length === 0) {
+        tbody.textContent = 'No results found';
+      } else {
+        tbody.textContent = '';
+        data.results.forEach((result, idx) => {
+          const tr = document.createElement('tr');
+          tr.className = 'border-b hover:bg-gray-50';
+
+          const td1 = document.createElement('td');
+          td1.className = 'py-3';
+          td1.textContent = idx + 1;
+          tr.appendChild(td1);
+
+          const td2 = document.createElement('td');
+          td2.className = 'py-3';
+          const link = document.createElement('a');
+          link.href = result.url;
+          link.target = '_blank';
+          link.className = 'text-blue-600 hover:underline';
+          link.textContent = result.title;
+          td2.appendChild(link);
+          tr.appendChild(td2);
+
+          const td3 = document.createElement('td');
+          td3.className = 'py-3';
+          td3.textContent = result.titleLength || '-';
+          tr.appendChild(td3);
+
+          const td4 = document.createElement('td');
+          td4.className = 'py-3';
+          td4.textContent = result.contentLength || '-';
+          tr.appendChild(td4);
+
+          const td5 = document.createElement('td');
+          td5.className = 'py-3';
+          const span = document.createElement('span');
+          span.className = result.hasSchema ? 'text-green-600' : 'text-gray-400';
+          span.textContent = result.hasSchema ? 'Yes' : 'No';
+          td5.appendChild(span);
+          tr.appendChild(td5);
+
+          const td6 = document.createElement('td');
+          td6.className = 'py-3 text-gray-600';
+          td6.textContent = result.domain || '';
+          tr.appendChild(td6);
+
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Suggestions
+      const suggestionsEl = document.getElementById('suggestions');
+      if (!data.suggestions || data.suggestions.length === 0) {
+        suggestionsEl.textContent = 'No specific suggestions available';
+      } else {
+        suggestionsEl.textContent = '';
+        data.suggestions.forEach(s => {
+          const div = document.createElement('div');
+          div.className = 'flex items-start gap-3 p-3 bg-gray-50 rounded-lg';
+
+          const bullet = document.createElement('span');
+          bullet.className = 'text-blue-600 text-xl';
+          bullet.textContent = '•';
+          div.appendChild(bullet);
+
+          const content = document.createElement('div');
+          const title = document.createElement('p');
+          title.className = 'font-medium';
+          title.textContent = s.title || '';
+          content.appendChild(title);
+
+          const desc = document.createElement('p');
+          desc.className = 'text-sm text-gray-600';
+          desc.textContent = s.description || '';
+          content.appendChild(desc);
+
+          div.appendChild(content);
+          suggestionsEl.appendChild(div);
+        });
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Allow Enter key to trigger analysis
+    document.getElementById('keywordInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') analyzeKeyword();
+    });
+  </script>
+</body>
+</html>

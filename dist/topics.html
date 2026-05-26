@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Topic 管理 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="topicsAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">📚 Topic 主题管理</h1>
+            <p class="text-gray-500 mt-1">管理内容主题架构</p>
+          </div>
+          <button @click="showCreateModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            + 新建 Topic
+          </button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="mb-6 border-b border-gray-200">
+          <nav class="flex space-x-8">
+            <button @click="activeTab = 'tree'" :class="activeTab === 'tree' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="py-4 px-1 border-b-2 font-medium text-sm transition">主题树</button>
+            <button @click="loadCoverage(); activeTab = 'coverage'" :class="activeTab === 'coverage' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="py-4 px-1 border-b-2 font-medium text-sm transition">Coverage 分析</button>
+          </nav>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">主题树</h2>
+            <span class="text-xs text-gray-500">拖拽排序</span>
+          </div>
+          <div id="topic-tree-root" class="space-y-2">
+            <template x-for="topic in tree" :key="topic.id">
+              <div class="topic-item" :class="'level-' + topic.level" :data-id="topic.id">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition sortable-item" :data-id="topic.id">
+                  <div class="flex items-center space-x-3">
+                    <span class="text-gray-400 cursor-move handle mr-2" title="拖拽移动">⋮⋮</span>
+                    <span class="text-gray-400 cursor-pointer" @click="toggleChildren(topic.id)">
+                      <span x-show="topic.children && topic.children.length > 0" x-text="expanded[topic.id] ? '▼' : '▶'"></span>
+                      <span x-show="!topic.children || topic.children.length === 0">•</span>
+                    </span>
+                    <div>
+                      <span class="font-medium text-gray-900" x-text="topic.name"></span>
+                      <span class="text-xs px-2 py-0.5 rounded ml-2" :class="levelClass(topic.level)" x-text="levelLabel(topic.level)"></span>
+                      <span class="text-xs text-gray-400 ml-2" x-text="'/' + topic.slug"></span>
+                    </div>
+                  </div>
+                  <div class="flex items-center space-x-3">
+                    <span class="text-xs text-gray-500" x-text="getArticleCount(topic.id) + ' 篇'"></span>
+                    <button @click="editTopic(topic)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                    <button @click="deleteTopic(topic.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                  </div>
+                </div>
+                <!-- Children -->
+                <div x-show="expanded[topic.id] && topic.children && topic.children.length > 0" class="ml-8 mt-2 space-y-2 children-container" :data-parent="topic.id">
+                  <template x-for="child in topic.children" :key="child.id">
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition sortable-item" :data-id="child.id">
+                      <div class="flex items-center space-x-3">
+                        <span class="text-gray-400 cursor-move handle mr-2" title="拖拽移动">⋮⋮</span>
+                        <span class="text-gray-400">└</span>
+                        <div>
+                          <span class="font-medium text-gray-900" x-text="child.name"></span>
+                          <span class="text-xs px-2 py-0.5 rounded ml-2" :class="levelClass(child.level)" x-text="levelLabel(child.level)"></span>
+                          <span class="text-xs text-gray-400 ml-2" x-text="'/' + child.slug"></span>
+                        </div>
+                      </div>
+                      <div class="flex items-center space-x-3">
+                        <span class="text-xs text-gray-500" x-text="getArticleCount(child.id) + ' 篇'"></span>
+                        <button @click="editTopic(child)" class="text-blue-600 hover:underline text-sm">编辑</button>
+                        <button @click="deleteTopic(child.id)" class="text-red-600 hover:underline text-sm">删除</button>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <div x-show="loading" class="text-center py-8 text-gray-500">加载中...</div>
+            <div x-show="!loading && tree.length === 0" class="text-center py-8 text-gray-500">暂无主题</div>
+          </div>
+        </div>
+
+        <!-- Coverage Tab -->
+        <div x-show="activeTab === 'coverage'" x-init="loadCoverage()" class="space-y-6">
+          <!-- Overview Cards -->
+          <div class="grid grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="text-2xl font-bold text-blue-600" x-text="coverageOverview.totalTopics || 0"></div>
+              <div class="text-sm text-gray-500">总主题数</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="text-2xl font-bold text-green-600" x-text="coverageOverview.totalArticles || 0"></div>
+              <div class="text-sm text-gray-500">文章总数</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="text-2xl font-bold text-purple-600" x-text="coverageOverview.overallCoverage || 0 + '%'"></div>
+              <div class="text-sm text-gray-500">总体覆盖度</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="flex space-x-2">
+                <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded" x-text="coverageOverview.coldTopics || 0 + ' 冷'"></span>
+                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded" x-text="coverageOverview.warmTopics || 0 + ' 温'"></span>
+                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded" x-text="coverageOverview.hotTopics || 0 + ' 热'"></span>
+              </div>
+              <div class="text-sm text-gray-500 mt-1">热度分布</div>
+            </div>
+          </div>
+
+          <!-- Heatmap -->
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-semibold mb-4">覆盖度热力图</h2>
+            <div class="mb-4">
+              <canvas id="coverageHeatmap" width="800" height="200"></canvas>
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+              <template x-for="t in coverageData" :key="t.id">
+                <div class="p-3 rounded-lg cursor-pointer transition hover:scale-105" :class="heatmapClass(t.heatLevel)" @click="showTopicCoverage(t)">
+                  <div class="font-medium text-sm" x-text="t.name"></div>
+                  <div class="flex items-center mt-1">
+                    <div class="flex-1 bg-gray-200 rounded-full h-2">
+                      <div class="h-2 rounded-full transition" :class="heatbarClass(t.heatLevel)" :style="'width:' + t.coveragePercent + '%'"></div>
+                    </div>
+                    <span class="text-xs ml-2" x-text="t.coveragePercent + '%'"></span>
+                  </div>
+                  <div class="text-xs text-gray-500 mt-1" x-text="t.articleCount + '/' + t.maxArticles + ' 篇'"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Gap List -->
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-semibold mb-4">内容缺口 TOP 5</h2>
+            <div class="space-y-2">
+              <template x-for="gap in topGaps" :key="gap.id">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <span class="font-medium" x-text="gap.name"></span>
+                    <span class="text-xs text-gray-400 ml-2" x-text="gap.slug"></span>
+                  </div>
+                  <div class="flex items-center space-x-3">
+                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                      <div class="bg-red-500 h-2 rounded-full" :style="'width:' + gap.coveragePercent + '%'"></div>
+                    </div>
+                    <span class="text-sm text-red-600" x-text="gap.coveragePercent + '%'"></span>
+                    <span class="text-xs text-gray-500" x-text="gap.gap + ' 篇缺口'"></span>
+                  </div>
+                </div>
+              </template>
+              <div x-show="!topGaps || topGaps.length === 0" class="text-center py-4 text-gray-500">暂无明显缺口</div>
+            </div>
+          </div>
+
+          <!-- Gap Detail Modal -->
+          <div x-show="selectedTopic" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 w-full max-w-lg">
+              <h2 class="text-xl font-bold mb-4" x-text="selectedTopic?.name + ' 覆盖度详情'"></h2>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">当前文章数</span>
+                  <span class="font-bold" x-text="selectedTopic?.articleCount"></span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">最大文章数</span>
+                  <span class="font-bold" x-text="selectedTopic?.maxArticles"></span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">覆盖度</span>
+                  <span class="font-bold" x-text="selectedTopic?.coveragePercent + '%'"></span>
+                </div>
+                <div>
+                  <div class="w-full bg-gray-200 rounded-full h-4">
+                    <div class="h-4 rounded-full transition" :class="heatbarClass(selectedTopic?.heatLevel)" :style="'width:' + selectedTopic?.coveragePercent + '%'"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-end mt-6">
+                <button @click="selectedTopic = null" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Create/Edit Modal -->
+    <div x-show="showCreateModal || editingTopic" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-md">
+        <h2 class="text-xl font-bold mb-6" x-text="editingTopic ? '编辑 Topic' : '新建 Topic'"></h2>
+        <form @submit.prevent="saveTopic" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">名称 *</label>
+            <input type="text" x-model="form.name" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Slug</label>
+            <input type="text" x-model="form.slug" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="自动生成" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">级别</label>
+            <select x-model="form.level" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="0">Pillar (核心主题)</option>
+              <option value="1">Cluster (子主题)</option>
+              <option value="2">Supporting (支撑内容)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">父主题</label>
+            <select x-model="form.parentId" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">无 (作为根主题)</option>
+              <template x-for="t in flatTopics" :key="t.id">
+                <option :value="t.id" x-text="t.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">描述</label>
+            <textarea x-model="form.description" rows="3" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">最大文章数</label>
+            <input type="number" x-model="form.maxArticles" value="30" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="flex justify-end space-x-3 pt-4">
+            <button type="button" @click="closeModal" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('topicsAdmin', () => ({
+        tree: [],
+        flatTopics: [],
+        loading: true,
+        expanded: {},
+        showCreateModal: false,
+        editingTopic: null,
+        activeTab: 'tree',
+        form: { name: '', slug: '', level: 0, parentId: '', description: '', maxArticles: 30 },
+        topicArticleCounts: {},
+
+        // Coverage data
+        coverageData: [],
+        coverageOverview: {},
+        topGaps: [],
+        selectedTopic: null,
+
+        async init() {
+          // Check URL params for default tab
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('tab') === 'coverage') {
+            this.activeTab = 'coverage';
+            await this.loadCoverage();
+          } else {
+            await this.loadTree();
+            this.$nextTick(() => this.initSortable());
+          }
+        },
+
+        async loadTree() {
+          this.loading = true;
+          try {
+            const res = await fetch('/api/topics/tree');
+            if (res.ok) {
+              const data = await res.json();
+              this.tree = data.tree || [];
+              this.flatTopics = data.flat || [];
+              this.tree.forEach(t => { this.expanded[t.id] = true; });
+              await this.loadArticleCounts();
+            }
+          } catch (e) { console.error('Failed to load topics:', e); }
+          finally { this.loading = false; }
+        },
+
+        async loadArticleCounts() {
+          try {
+            const res = await fetch('/api/topics/coverage/all');
+            if (res.ok) {
+              const data = await res.json();
+              data.topics.forEach(t => {
+                this.topicArticleCounts[t.id] = t.articleCount;
+              });
+            }
+          } catch (e) { console.error('Failed to load article counts:', e); }
+        },
+
+        async loadCoverage() {
+          try {
+            const res = await fetch('/api/topics/coverage/all');
+            if (res.ok) {
+              const data = await res.json();
+              this.coverageData = data.topics || [];
+              this.coverageOverview = data.overview || {};
+              this.topGaps = data.topGaps || [];
+              this.$nextTick(() => this.drawCoverageHeatmap());
+            }
+          } catch (e) { console.error('Failed to load coverage:', e); }
+        },
+
+        drawCoverageHeatmap() {
+          const canvas = document.getElementById('coverageHeatmap');
+          if (!canvas || this.coverageData.length === 0) return;
+
+          const ctx = canvas.getContext('2d');
+          const width = canvas.width;
+          const height = canvas.height;
+          ctx.clearRect(0, 0, width, height);
+
+          // Find max articles for normalization
+          const maxArticles = Math.max(...this.coverageData.map(t => t.maxArticles || 30), 1);
+
+          // Draw heat cells
+          const cols = Math.ceil(Math.sqrt(this.coverageData.length));
+          const rows = Math.ceil(this.coverageData.length / cols);
+          const cellWidth = width / cols;
+          const cellHeight = height / rows;
+          const padding = 2;
+
+          this.coverageData.forEach((topic, i) => {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const x = col * cellWidth + padding;
+            const y = row * cellHeight + padding;
+            const w = cellWidth - padding * 2;
+            const h = cellHeight - padding * 2;
+
+            // Color based on heat level
+            const intensity = topic.articleCount / maxArticles;
+            const color = this.getHeatColor(intensity);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(x, y, Math.min(w, h), Math.min(w, h), 4);
+            ctx.fill();
+
+            // Draw article count text if cell is big enough
+            if (cellWidth > 40 && cellHeight > 30) {
+              ctx.fillStyle = '#fff';
+              ctx.font = '10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(topic.articleCount, x + w / 2, y + h / 2);
+            }
+          });
+        },
+
+        getHeatColor(intensity) {
+          // Cold (red) -> Warm (yellow) -> Hot (green)
+          if (intensity < 0.3) {
+            return `rgba(239, 68, 68, ${0.4 + intensity * 0.6})`; // Red
+          } else if (intensity < 0.7) {
+            return `rgba(245, 158, 11, ${0.5 + intensity * 0.5})`; // Yellow/Orange
+          } else {
+            return `rgba(34, 197, 94, ${0.5 + intensity * 0.5})`; // Green
+          }
+        },
+
+        showTopicCoverage(topic) {
+          this.selectedTopic = topic;
+        },
+
+        heatmapClass(level) {
+          return {
+            'cold': 'bg-red-50 border border-red-200',
+            'warm': 'bg-yellow-50 border border-yellow-200',
+            'hot': 'bg-green-50 border border-green-200'
+          }[level] || 'bg-gray-50 border border-gray-200';
+        },
+
+        heatbarClass(level) {
+          return {
+            'cold': 'bg-red-500',
+            'warm': 'bg-yellow-500',
+            'hot': 'bg-green-500'
+          }[level] || 'bg-gray-500';
+        },
+
+        toggleChildren(id) {
+          this.expanded[id] = !this.expanded[id];
+        },
+
+        getArticleCount(topicId) {
+          return this.topicArticleCounts[topicId] || 0;
+        },
+
+        editTopic(topic) {
+          this.editingTopic = topic;
+          this.form = {
+            name: topic.name,
+            slug: topic.slug,
+            level: topic.level,
+            parentId: topic.parentId || '',
+            description: topic.description || '',
+            maxArticles: topic.maxArticles || 30
+          };
+        },
+
+        async saveTopic() {
+          try {
+            const method = this.editingTopic ? 'PUT' : 'POST';
+            const url = this.editingTopic ? `/api/topics/${this.editingTopic.id}` : '/api/topics';
+            const payload = {
+              ...this.form,
+              parentId: this.form.parentId ? parseInt(this.form.parentId) : null
+            };
+            const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              this.closeModal();
+              await this.loadTree();
+            }
+          } catch (e) { console.error('Failed to save topic:', e); alert('保存失败'); }
+        },
+
+        async deleteTopic(id) {
+          if (!confirm('确定要删除这个主题吗？')) return;
+          try {
+            await fetch(`/api/topics/${id}`, { method: 'DELETE' });
+            await this.loadTree();
+          } catch (e) { console.error('Failed to delete topic:', e); }
+        },
+
+        closeModal() {
+          this.showCreateModal = false;
+          this.editingTopic = null;
+          this.form = { name: '', slug: '', level: 0, parentId: '', description: '', maxArticles: 30 };
+        },
+
+        async initSortable() {
+          if (typeof Sortable === 'undefined') return;
+          const rootEl = document.getElementById('topic-tree-root');
+          if (!rootEl) return;
+
+          const self = this;
+
+          new Sortable(rootEl, {
+            animation: 150,
+            handle: '.handle',
+            ghostClass: 'opacity-50',
+            onEnd: async (evt) => {
+              const item = evt.item;
+              const id = parseInt(item.dataset.id);
+              const parentId = item.closest('.children-container')?.dataset.parent || null;
+
+              try {
+                await fetch(`/api/topics/${id}/move`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    parentId: parentId ? parseInt(parentId) : null,
+                    orderIndex: evt.newIndex || 0
+                  })
+                });
+                await this.loadTree();
+              } catch (e) {
+                console.error('Failed to move topic:', e);
+              }
+            }
+          });
+
+          // Init children containers
+          document.querySelectorAll('.children-container').forEach(container => {
+            new Sortable(container, {
+              animation: 150,
+              handle: '.handle',
+              ghostClass: 'opacity-50',
+              group: 'topics',
+              onEnd: async (evt) => {
+                const item = evt.item;
+                const id = parseInt(item.dataset.id);
+                const newParentId = parseInt(container.dataset.parent);
+
+                try {
+                  await fetch(`/api/topics/${id}/move`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      parentId: newParentId,
+                      orderIndex: evt.newIndex || 0
+                    })
+                  });
+                  await this.loadTree();
+                } catch (e) {
+                  console.error('Failed to move topic:', e);
+                }
+              }
+            });
+          });
+        },
+
+        levelLabel(level) {
+          return { 0: 'Pillar', 1: 'Cluster', 2: 'Supporting' }[level] || 'Topic';
+        },
+
+        levelClass(level) {
+          return { 0: 'bg-blue-100 text-blue-800', 1: 'bg-purple-100 text-purple-800', 2: 'bg-gray-100 text-gray-800' }[level] || 'bg-gray-100';
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

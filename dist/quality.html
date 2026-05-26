@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Index Quality - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="qualityAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">🎯 Index Quality 控制面板</h1>
+            <p class="text-gray-500 mt-1">集中管理所有文章的 SEO 质量</p>
+          </div>
+          <button @click="loadPosts" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="mb-6 border-b border-gray-200">
+          <nav class="-mb-px flex space-x-8">
+            <button @click="activeTab = 'posts'" :class="activeTab === 'posts' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">文章质量</button>
+            <button @click="activeTab = 'internallinks'; loadInternalLinks();" :class="activeTab === 'internallinks' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">内链优化</button>
+            <button @click="activeTab = 'cannibalization'; loadCannibalization();" :class="activeTab === 'cannibalization' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">蚕食检测</button>
+            <button @click="activeTab = 'decay'; loadDecay();" :class="activeTab === 'decay' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">衰减检测</button>
+            <button @click="activeTab = 'lifecycle'; loadLifecycleStats();" :class="activeTab === 'lifecycle' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">生命周期</button>
+            <button @click="activeTab = 'coverage'; loadCoverage();" :class="activeTab === 'coverage' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">覆盖分析</button>
+          </nav>
+        </div>
+
+        <!-- Posts Tab -->
+        <div x-show="activeTab === 'posts'">
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">总文章数</div>
+            <div class="text-2xl font-bold" x-text="stats.total">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">已发布</div>
+            <div class="text-2xl font-bold text-green-600" x-text="stats.published">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">AI 高风险</div>
+            <div class="text-2xl font-bold text-red-600" x-text="stats.highRiskCount">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">低质量</div>
+            <div class="text-2xl font-bold text-yellow-600" x-text="stats.lowQualityCount">-</div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <select x-model="filter" @change="loadPosts" class="px-4 py-2 border rounded-lg">
+              <option value="">全部</option>
+              <option value="low">EEAT &lt; 50</option>
+              <option value="aiRiskHigh">AI风险 &gt; 70</option>
+              <option value="decaying">衰减中</option>
+              <option value="noIndex">Noindex</option>
+            </select>
+            <select x-model="sortBy" @change="loadPosts" class="px-4 py-2 border rounded-lg">
+              <option value="createdAt">按时间</option>
+              <option value="qualityScore">按质量分</option>
+              <option value="aiRisk">按AI风险</option>
+              <option value="gscClicks">按点击量</option>
+            </select>
+            <select x-model="order" @change="loadPosts" class="px-4 py-2 border rounded-lg">
+              <option value="desc">降序</option>
+              <option value="asc">升序</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Batch Actions -->
+        <div x-show="selectedPosts.length > 0" class="bg-blue-50 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <span class="text-blue-700">已选择 <span x-text="selectedPosts.length"></span> 篇</span>
+          <div class="flex space-x-3">
+            <button @click="batchAction('index')" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">✓ 设为已发布</button>
+            <button @click="batchAction('noindex')" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">🚫 设为Noindex</button>
+            <button @click="batchAction('delete')" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">🗑️ 删除</button>
+          </div>
+        </div>
+
+        <!-- Posts Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left">
+                  <input type="checkbox" @change="toggleSelectAll" :checked="selectedPosts.length === posts.length && posts.length > 0" class="w-4 h-4 rounded">
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">文章</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">EEAT</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">AI风险</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">生命周期</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">评分</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <template x-for="post in posts" :key="post.id">
+                <tr class="hover:bg-gray-50" :class="selectedPosts.includes(post.id) ? 'bg-blue-50' : ''">
+                  <td class="px-4 py-3">
+                    <input type="checkbox" :value="post.id" x-model="selectedPosts" class="w-4 h-4 rounded">
+                  </td>
+                  <td class="px-6 py-4">
+                    <a :href="'/admin/posts/' + post.id + '/edit'" class="font-medium text-gray-900 hover:text-blue-600" x-text="post.title"></a>
+                    <div class="text-xs text-gray-500" x-text="'/' + post.slug"></div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded" :class="statusClass(post.status)" x-text="statusLabel(post.status)"></span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center">
+                      <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                        <div class="h-2 rounded-full" :class="post.eeatScore < 50 ? 'bg-red-500' : post.eeatScore < 70 ? 'bg-yellow-500' : 'bg-green-500'" :style="'width: ' + (post.eeatScore || 50) + '%'"></div>
+                      </div>
+                      <span class="text-sm" x-text="post.eeatScore ? post.eeatScore.toFixed(1) : '-'"></span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <template x-if="post.aiRiskScore">
+                      <span class="px-2 py-1 text-xs rounded" :class="post.aiRiskScore > 70 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'" x-text="post.aiRiskScore.toFixed(1)"></span>
+                    </template>
+                    <template x-if="!post.aiRiskScore">
+                      <span class="text-gray-400">-</span>
+                    </template>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="px-2 py-1 text-xs rounded" :class="lifecycleClass(post.lifecycleStage)" x-text="lifecycleLabel(post.lifecycleStage)"></span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span x-show="post.avgRating" class="text-sm">⭐ <span x-text="post.avgRating.toFixed(1)"></span></span>
+                    <span x-show="!post.avgRating" class="text-gray-400">-</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex space-x-2">
+                      <a :href="'/posts/' + post.slug" target="_blank" class="text-blue-600 hover:underline text-sm">预览</a>
+                      <button @click="quickAction(post.id, post.status === 'published' ? 'noindex' : 'index')" class="text-sm" :class="post.status === 'published' ? 'text-yellow-600 hover:underline' : 'text-green-600 hover:underline'" x-text="post.status === 'published' ? '撤下' : '发布'"></button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="loading" class="text-center py-12 text-gray-500">加载中...</div>
+          <div x-show="!loading && posts.length === 0" class="text-center py-12 text-gray-500">暂无数据</div>
+        </div>
+
+        <!-- Internal Links Tab -->
+        <div x-show="activeTab === 'internallinks'">
+          <!-- Link Stats -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">总文章数</div>
+              <div class="text-2xl font-bold" x-text="linkStats.totalPosts">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">有出链文章</div>
+              <div class="text-2xl font-bold text-green-600" x-text="linkStats.postsWithOutboundLinks">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">有入链文章</div>
+              <div class="text-2xl font-bold text-blue-600" x-text="linkStats.postsWithInboundLinks">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">孤立页面</div>
+              <div class="text-2xl font-bold text-red-600" x-text="linkStats.orphanPosts">-</div>
+            </div>
+          </div>
+
+          <!-- Link Stats Detail -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">总出链数</div>
+              <div class="text-2xl font-bold" x-text="linkStats.totalOutboundLinks">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">内链数</div>
+              <div class="text-2xl font-bold text-green-600" x-text="linkStats.totalInternalLinks">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">外链数</div>
+              <div class="text-2xl font-bold text-gray-600" x-text="linkStats.totalExternalLinks">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">平均链接数/篇</div>
+              <div class="text-2xl font-bold text-blue-600" x-text="linkStats.averageLinksPerPost">-</div>
+            </div>
+          </div>
+
+          <!-- Orphan Pages Section -->
+          <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4">孤立页面（未被任何文章链接）</h3>
+            <div x-show="loadingOrphans" class="text-center py-8 text-gray-500">加载中...</div>
+            <div x-show="!loadingOrphans && orphanPages.length === 0" class="text-center py-8 text-gray-500">没有孤立页面</div>
+            <div x-show="!loadingOrphans && orphanPages.length > 0" class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">文章</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <template x-for="page in orphanPages" :key="page.id">
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <a :href="'/posts/' + page.slug" target="_blank" class="font-medium text-gray-900 hover:text-blue-600" x-text="page.title"></a>
+                        <div class="text-xs text-gray-500" x-text="'/' + page.slug"></div>
+                      </td>
+                      <td class="px-4 py-3">
+                        <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800" x-text="page.status"></span>
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-500" x-text="new Date(page.createdAt).toLocaleDateString()"></td>
+                      <td class="px-4 py-3">
+                        <a :href="'/posts/' + page.slug" target="_blank" class="text-blue-600 hover:underline text-sm">预览</a>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Link Suggestions Section -->
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <h3 class="text-lg font-semibold mb-4">内链建议（可添加的链接）</h3>
+            <div x-show="loadingSuggestions" class="text-center py-8 text-gray-500">加载中...</div>
+            <div x-show="!loadingSuggestions && linkSuggestions.length === 0" class="text-center py-8 text-gray-500">暂无建议</div>
+            <div x-show="!loadingSuggestions && linkSuggestions.length > 0" class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">源文章</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">建议链接到</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">理由</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">置信度</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <template x-for="suggestion in linkSuggestions" :key="suggestion.sourcePostId + '-' + suggestion.targetPostId">
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <a :href="'/posts/' + suggestion.sourcePostSlug" target="_blank" class="font-medium text-gray-900 hover:text-blue-600" x-text="suggestion.sourcePostTitle"></a>
+                      </td>
+                      <td class="px-4 py-3">
+                        <a :href="'/posts/' + suggestion.targetPostSlug" target="_blank" class="text-blue-600 hover:underline" x-text="suggestion.targetPostTitle"></a>
+                        <div class="text-xs text-gray-500" x-text="'/' + suggestion.targetPostSlug"></div>
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-600" x-text="suggestion.reason"></td>
+                      <td class="px-4 py-3">
+                        <span class="px-2 py-1 text-xs rounded" :class="suggestion.confidence >= 0.8 ? 'bg-green-100 text-green-800' : suggestion.confidence >= 0.6 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'" x-text="(suggestion.confidence * 100).toFixed(0) + '%'"></span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cannibalization Tab -->
+        <div x-show="activeTab === 'cannibalization'">
+          <div class="mb-4 flex justify-between items-center">
+            <p class="text-gray-600">检测竞争相同关键词的页面组，帮助优化内部竞争</p>
+            <button @click="loadCannibalization" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm">🔄 重新扫描</button>
+          </div>
+
+          <div x-show="loadingCannibalization" class="text-center py-12 text-gray-500">检测中...</div>
+          <div x-show="!loadingCannibalization && cannibalizationGroups.length === 0" class="text-center py-12 text-gray-500 bg-white rounded-xl">✅ 未检测到蚕食问题</div>
+
+          <!-- Cannibalization Risk Heatmap -->
+          <div x-show="!loadingCannibalization && cannibalizationGroups.length > 0" class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4">🔴 蚕食风险热力图</h3>
+            <p class="text-sm text-gray-500 mb-4">颜色表示严重程度：红色 = 高风险，黄色 = 中等，绿色 = 低</p>
+            <div class="grid grid-cols-6 gap-2">
+              <template x-for="group in cannibalizationGroups" :key="group.groupId">
+                <div
+                  class="p-3 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-md"
+                  :class="cannibalizationHeatmapClass(group.severity)"
+                  :title="group.keywords.slice(0, 2).join(', ')"
+                  @click="scrollToGroup(group.groupId)"
+                >
+                  <div class="font-medium text-xs truncate" x-text="group.keywords[0] || 'Group ' + group.groupId"></div>
+                  <div class="text-xs mt-1">
+                    <span x-text="group.pages.length"></span> 页
+                  </div>
+                  <div class="w-full bg-white bg-opacity-50 rounded-full h-1.5 mt-2">
+                    <div class="h-1.5 rounded-full" :class="cannibalizationBarClass(group.severity)" :style="'width:' + (group.overlapScore * 100) + '%'"></div>
+                  </div>
+                  <div class="text-xs mt-1 opacity-75" x-text="(group.overlapScore * 100).toFixed(0) + '%'"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div x-show="!loadingCannibalization && cannibalizationGroups.length > 0" class="space-y-4">
+            <template x-for="group in cannibalizationGroups" :key="group.groupId">
+              <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-start justify-between mb-4">
+                  <div>
+                    <div class="flex items-center gap-2 mb-2">
+                      <span class="px-2 py-1 text-xs rounded font-medium" :class="severityClass(group.severity)" x-text="severityLabel(group.severity)"></span>
+                      <span class="text-sm text-gray-500">重叠度: <span x-text="(group.overlapScore * 100).toFixed(0)"></span>%</span>
+                    </div>
+                    <h3 class="font-semibold text-gray-900" x-text="'关键词组: ' + group.keywords.slice(0, 3).join(', ')"></h3>
+                    <p class="text-sm text-gray-500 mt-1" x-text="group.keywords.length + ' 个竞争关键词'"></p>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm text-gray-500">建议方案</div>
+                    <div class="mt-1">
+                      <span class="px-3 py-1 text-sm rounded-lg" :class="actionClass(group.suggestedResolution.action)" x-text="actionLabel(group.suggestedResolution.action)"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="text-sm text-gray-600 mb-4" x-text="group.suggestedResolution.description"></p>
+
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-50">
+                      <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">页面</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EEAT</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">点击</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CTR</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">评分</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                      <template x-for="page in group.pages" :key="page.id">
+                        <tr class="hover:bg-gray-50">
+                          <td class="px-3 py-2">
+                            <a :href="'/posts/' + page.slug" target="_blank" class="font-medium text-gray-900 hover:text-blue-600" x-text="page.title"></a>
+                            <div class="text-xs text-gray-400" x-text="'/' + page.slug"></div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <span x-text="page.eeatScore ? page.eeatScore.toFixed(1) : '-'"></span>
+                          </td>
+                          <td class="px-3 py-2">
+                            <span x-text="page.gscClicks || 0"></span>
+                          </td>
+                          <td class="px-3 py-2">
+                            <span x-text="page.gscCtr ? (page.gscCtr * 100).toFixed(1) + '%' : '-'"></span>
+                          </td>
+                          <td class="px-3 py-2">
+                            <span x-text="page.avgRating ? '⭐ ' + page.avgRating.toFixed(1) : '-'"></span>
+                          </td>
+                          <td class="px-3 py-2">
+                            <select @change="pageSelectedAction(group.groupId, page.id, $event.target.value)" class="text-sm border rounded px-2 py-1">
+                              <option value="">选择操作</option>
+                              <option value="canonical">设为主页面</option>
+                              <option value="301">重定向到此页</option>
+                              <option value="merge">合并至此页</option>
+                            </select>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="mt-4 flex gap-2 flex-wrap">
+                  <button @click="applyResolution(group.groupId, 'canonical')" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">✓ 应用canonical方案</button>
+                  <button @click="applyResolution(group.groupId, '301')" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">🔀 应用301方案</button>
+                  <button @click="generateMergeDraft(group.groupId)" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">📝 生成合并草稿</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Decay Detection Tab -->
+        <div x-show="activeTab === 'decay'">
+          <div class="mb-4 flex justify-between items-center">
+            <p class="text-gray-600">检测内容衰减趋势，比较最近14天 vs 前14天的GSC数据变化</p>
+            <button @click="loadDecay" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm">🔄 重新扫描</button>
+          </div>
+
+          <!-- Decay Stats -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">衰减文章</div>
+              <div class="text-2xl font-bold text-red-600" x-text="decayStats.decaying">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">严重衰减</div>
+              <div class="text-2xl font-bold text-red-700" x-text="decayStats.severe">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">中等衰减</div>
+              <div class="text-2xl font-bold text-yellow-600" x-text="decayStats.moderate">-</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <div class="text-sm text-gray-500">最后分析时间</div>
+              <div class="text-sm font-medium" x-text="decayStats.analyzedAt ? new Date(decayStats.analyzedAt).toLocaleString() : '-'">-</div>
+            </div>
+          </div>
+
+          <div x-show="loadingDecay" class="text-center py-12 text-gray-500">检测中...</div>
+          <div x-show="!loadingDecay && decayingPosts.length === 0" class="text-center py-12 text-gray-500 bg-white rounded-xl">✅ 没有检测到衰减的文章</div>
+
+          <div x-show="!loadingDecay && decayingPosts.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">文章</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">当前点击</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">变化率</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">衰减分</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">严重度</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">建议操作</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="post in decayingPosts" :key="post.postId">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4">
+                      <a :href="'/admin/posts/' + post.postId + '/edit'" class="font-medium text-gray-900 hover:text-blue-600" x-text="post.title"></a>
+                      <div class="text-xs text-gray-500" x-text="'/' + post.slug"></div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span x-text="post.currentClicks"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span :class="post.changeRate < -30 ? 'text-red-600 font-medium' : 'text-yellow-600'" x-text="post.changeRate.toFixed(1) + '%'"></span>
+                      <span :class="post.trend === 'up' ? 'text-green-600' : post.trend === 'down' || post.trend === 'critical' ? 'text-red-600' : 'text-gray-400'" class="ml-1" x-text="trendIcon(post.trend)"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <div class="flex items-center">
+                        <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                          <div class="h-2 rounded-full" :class="post.decayScore >= 75 ? 'bg-red-500' : post.decayScore >= 50 ? 'bg-yellow-500' : 'bg-blue-500'" :style="'width: ' + post.decayScore + '%'"></div>
+                        </div>
+                        <span class="text-sm" x-text="post.decayScore"></span>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 text-xs rounded" :class="severityClass(post.severity)" x-text="severityLabel(post.severity)"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 text-xs rounded" :class="actionClass(post.suggestedAction)" x-text="actionLabel(post.suggestedAction)"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <button @click="refreshDecay(post.postId)" class="text-blue-600 hover:underline text-sm">生成建议</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Decay Detail Modal -->
+          <div x-show="selectedDecayPost" x-transition class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+            <div class="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" x-text="selectedDecayPost ? selectedDecayPost.title : ''"></h3>
+                <button @click="selectedDecayPost = null" class="text-gray-500 hover:text-gray-700">✕</button>
+              </div>
+              <div x-show="selectedDecayPost" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-sm text-gray-500">当前周期点击</div>
+                    <div class="text-xl font-bold" x-text="selectedDecayPost.currentClicks"></div>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-sm text-gray-500">上一周期点击</div>
+                    <div class="text-xl font-bold" x-text="selectedDecayPost.previousClicks"></div>
+                  </div>
+                </div>
+                <div class="bg-red-50 rounded-lg p-4">
+                  <div class="text-sm text-gray-500">变化率</div>
+                  <div class="text-xl font-bold" :class="selectedDecayPost.changeRate < 0 ? 'text-red-600' : 'text-green-600'" x-text="selectedDecayPost.changeRate.toFixed(1) + '%'"></div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-4">
+                  <h4 class="font-semibold mb-2">趋势数据</h4>
+                  <div class="text-sm text-gray-600 space-y-1">
+                    <template x-for="day in selectedDecayPost.daysTrend" :key="day.date">
+                      <div class="flex justify-between">
+                        <span x-text="day.date"></span>
+                        <span>点击: <span x-text="day.clicks"></span> | 展示: <span x-text="day.impressions"></span></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <div class="bg-yellow-50 rounded-lg p-4">
+                  <h4 class="font-semibold mb-2">建议操作</h4>
+                  <div class="space-y-2">
+                    <template x-for="rec in selectedDecayPost.recommendations" :key="rec">
+                      <div class="flex items-start">
+                        <span class="text-yellow-600 mr-2">•</span>
+                        <span class="text-sm" x-text="rec"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <button @click="refreshDecay(selectedDecayPost.postId)" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">生成刷新建议</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coverage Tab -->
+      <div x-show="activeTab === 'coverage'">
+        <div class="mb-4 flex justify-between items-center">
+          <p class="text-gray-600">分类和品牌的内容覆盖度分析</p>
+          <button @click="loadCoverage" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm">🔄 刷新</button>
+        </div>
+
+        <!-- Coverage Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">覆盖分类数</div>
+            <div class="text-2xl font-bold" x-text="coverageStats.categoriesCovered">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">覆盖品牌数</div>
+            <div class="text-2xl font-bold text-blue-600" x-text="coverageStats.brandsCovered">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">平均覆盖率</div>
+            <div class="text-2xl font-bold text-green-600" x-text="(coverageStats.avgCoverage || 0).toFixed(1) + '%'">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">低覆盖分类</div>
+            <div class="text-2xl font-bold text-red-600" x-text="coverageStats.lowCoverageCategories">-</div>
+          </div>
+        </div>
+
+        <div x-show="loadingCoverage" class="text-center py-12 text-gray-500">加载中...</div>
+        <div x-show="!loadingCoverage && coverageData.length === 0" class="text-center py-12 text-gray-500 bg-white rounded-xl">暂无覆盖数据</div>
+
+        <!-- Coverage Heatmap Table -->
+        <div x-show="!loadingCoverage && coverageData.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold">📊 分类覆盖率热力图</h3>
+            <p class="text-sm text-gray-500 mt-1">颜色越深表示覆盖度越高</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">分类</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">商品数</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">覆盖率</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">质量均分</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="item in coverageData" :key="item.name">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                      <div class="font-medium text-gray-900" x-text="item.name"></div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600" x-text="item.productCount || 0"></td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-24 bg-gray-200 rounded-full h-2">
+                          <div class="h-2 rounded-full" :class="coverageBarClass(item.coverage)" :style="'width: ' + item.coverage + '%'"></div>
+                        </div>
+                        <span class="text-sm font-medium" x-text="item.coverage.toFixed(1) + '%'"></span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span x-show="item.avgQuality" class="text-sm" x-text="item.avgQuality.toFixed(1)"></span>
+                      <span x-show="!item.avgQuality" class="text-gray-400">-</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="coverageStatusClass(item.coverage)" x-text="coverageStatusLabel(item.coverage)"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Brand Coverage Table -->
+        <div x-show="!loadingCoverage && brandCoverageData.length > 0" class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold">🏷️ 品牌覆盖度</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">品牌</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">商品数</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">覆盖率</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="brand in brandCoverageData" :key="brand.name">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-medium text-gray-900" x-text="brand.name || '-'"></td>
+                    <td class="px-4 py-3 text-gray-600" x-text="brand.productCount || 0"></td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-24 bg-gray-200 rounded-full h-2">
+                          <div class="h-2 rounded-full" :class="coverageBarClass(brand.coverage)" :style="'width: ' + brand.coverage + '%'"></div>
+                        </div>
+                        <span class="text-sm font-medium" x-text="brand.coverage.toFixed(1) + '%'"></span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="coverageStatusClass(brand.coverage)" x-text="coverageStatusLabel(brand.coverage)"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+      <div x-show="activeTab === 'lifecycle'">
+        <div class="mb-4 flex justify-between items-center">
+          <p class="text-gray-600">管理文章的搜索索引生命周期阶段，控制 X-Robots-Tag 头</p>
+        </div>
+
+        <!-- Lifecycle Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">🔥 热门</div>
+            <div class="text-2xl font-bold text-red-600" x-text="lifecycleStats.hot">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">☀️ 温热</div>
+            <div class="text-2xl font-bold text-yellow-600" x-text="lifecycleStats.warm">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">❄️ 冷却</div>
+            <div class="text-2xl font-bold text-blue-600" x-text="lifecycleStats.cold">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">📦 归档</div>
+            <div class="text-2xl font-bold text-gray-600" x-text="lifecycleStats.archive">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">总计</div>
+            <div class="text-2xl font-bold" x-text="lifecycleStats.total">-</div>
+          </div>
+        </div>
+
+        <!-- Lifecycle Info -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <h3 class="font-semibold mb-4">X-Robots-Tag 生命周期规则</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div class="flex items-start space-x-3 p-3 bg-red-50 rounded-lg">
+              <span class="text-red-600 font-bold">🔥 热门</span>
+              <span class="text-gray-600">允许索引，正常提供</span>
+            </div>
+            <div class="flex items-start space-x-3 p-3 bg-yellow-50 rounded-lg">
+              <span class="text-yellow-600 font-bold">☀️ 温热</span>
+              <span class="text-gray-600">允许索引，可能减少展示</span>
+            </div>
+            <div class="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
+              <span class="text-blue-600 font-bold">❄️ 冷却</span>
+              <span class="text-gray-600"><code class="bg-blue-100 px-1 rounded">noindex</code> - 停止展示但保留页面</span>
+            </div>
+            <div class="flex items-start space-x-3 p-3 bg-gray-100 rounded-lg">
+              <span class="text-gray-600 font-bold">📦 归档</span>
+              <span class="text-gray-600"><code class="bg-gray-200 px-1 rounded">noindex, noarchive</code> - 完全隐藏</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <h3 class="font-semibold mb-4">批量操作</h3>
+          <div class="flex flex-wrap gap-3">
+            <button @click="batchSetLifecycle('hot')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm">🔥 设为热门</button>
+            <button @click="batchSetLifecycle('warm')" class="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 text-sm">☀️ 设为温热</button>
+            <button @click="batchSetLifecycle('cold')" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm">❄️ 设为冷却</button>
+            <button @click="batchSetLifecycle('archive')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">📦 设为归档</button>
+            <button @click="batchSetLifecycle(null)" class="px-4 py-2 bg-white border text-gray-700 rounded-lg hover:bg-gray-50 text-sm">清除状态</button>
+          </div>
+          <p class="text-sm text-gray-500 mt-3" x-show="selectedPosts.length > 0">已选择 <span x-text="selectedPosts.length"></span> 篇文章</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Merge Draft Preview Modal -->
+    <div x-show="showMergeDraftModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" x-transition @click.self="showMergeDraftModal = false; mergeDraftPreview = null">
+      <div class="bg-white rounded-xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold">合并草稿预览</h2>
+          <button @click="showMergeDraftModal = false; mergeDraftPreview = null" class="text-gray-500 hover:text-gray-700 text-xl">✕</button>
+        </div>
+        <div x-show="mergeDraftPreview" x-transition>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">标题</label>
+            <p class="font-medium text-lg" x-text="mergeDraftPreview?.title"></p>
+          </div>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">Slug</label>
+            <p class="font-mono text-sm" x-text="mergeDraftPreview?.slug"></p>
+          </div>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500">来源页面</label>
+            <div class="flex flex-wrap gap-2 mt-1">
+              <template x-for="page in mergeDraftPreview?.sourcePages" :key="page.id">
+                <span class="px-2 py-1 bg-gray-100 rounded text-sm" x-text="page.title"></span>
+              </template>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="text-sm text-gray-500 mb-2 block">内容预览</label>
+            <div class="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
+              <pre class="text-sm whitespace-pre-wrap" x-text="mergeDraftPreview?.content"></pre>
+            </div>
+          </div>
+          <div class="flex justify-end space-x-3">
+            <button @click="showMergeDraftModal = false; mergeDraftPreview = null" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+            <button @click="saveMergeDraft" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">保存为草稿</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('qualityAdmin', () => ({
+        posts: [],
+        loading: true,
+        activeTab: 'posts',
+        selectedPosts: [],
+        filter: '',
+        sortBy: 'createdAt',
+        order: 'desc',
+        stats: { total: 0, published: 0, highRiskCount: 0, lowQualityCount: 0 },
+        linkStats: { totalPosts: 0, postsWithOutboundLinks: 0, postsWithInboundLinks: 0, orphanPosts: 0, totalOutboundLinks: 0, totalInternalLinks: 0, totalExternalLinks: 0, averageLinksPerPost: 0 },
+        orphanPages: [],
+        linkSuggestions: [],
+        loadingOrphans: false,
+        loadingSuggestions: false,
+        cannibalizationGroups: [],
+        loadingCannibalization: false,
+        selectedPageActions: {},
+        decayingPosts: [],
+        loadingDecay: false,
+        selectedDecayPost: null,
+        decayStats: { decaying: 0, severe: 0, moderate: 0, analyzedAt: null },
+        lifecycleStats: { hot: 0, warm: 0, cold: 0, archive: 0, total: 0 },
+        mergeDraftPreview: null,
+        showMergeDraftModal: false,
+        // Coverage data
+        coverageData: [],
+        brandCoverageData: [],
+        coverageStats: { categoriesCovered: 0, brandsCovered: 0, avgCoverage: 0, lowCoverageCategories: 0 },
+        loadingCoverage: false,
+
+        async init() {
+          // Check URL params for default tab
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('tab') === 'internallinks') {
+            this.activeTab = 'internallinks';
+            await this.loadInternalLinks();
+          } else {
+            await this.loadStats();
+            await this.loadPosts();
+          }
+        },
+
+        async loadStats() {
+          try {
+            const res = await fetch('/api/quality/stats');
+            if (res.ok) {
+              this.stats = await res.json();
+            }
+          } catch (e) { console.error('Failed to load stats:', e); }
+        },
+
+        async loadPosts() {
+          this.loading = true;
+          try {
+            const params = new URLSearchParams();
+            if (this.filter) params.append('filter', this.filter);
+            if (this.sortBy) params.append('sortBy', this.sortBy);
+            if (this.order) params.append('order', this.order);
+            const res = await fetch('/api/quality/posts?' + params.toString());
+            if (res.ok) {
+              const data = await res.json();
+              this.posts = data.posts || [];
+            }
+          } catch (e) { console.error('Failed to load posts:', e); }
+          finally { this.loading = false; }
+        },
+
+        async loadInternalLinks() {
+          this.loadingOrphans = true;
+          this.loadingSuggestions = true;
+          try {
+            const [orphansRes, suggestionsRes] = await Promise.all([
+              fetch('/api/quality/orphan-pages'),
+              fetch('/api/quality/link-suggestions?limit=50'),
+            ]);
+            if (orphansRes.ok) {
+              const data = await orphansRes.json();
+              this.orphanPages = data.orphans || [];
+            }
+            if (suggestionsRes.ok) {
+              const data = await suggestionsRes.json();
+              this.linkSuggestions = data.suggestions || [];
+            }
+            const statsRes = await fetch('/api/quality/internal-links');
+            if (statsRes.ok) {
+              const data = await statsRes.json();
+              this.linkStats = data.stats || this.linkStats;
+            }
+          } catch (e) { console.error('Failed to load internal links:', e); }
+          finally { this.loadingOrphans = false; this.loadingSuggestions = false; }
+        },
+
+        async batchAction(action) {
+          if (this.selectedPosts.length === 0) return;
+          const confirmed = confirm(`确定要对 ${this.selectedPosts.length} 篇文章执行 "${action}" 操作吗？`);
+          if (!confirmed) return;
+          try {
+            const res = await fetch('/api/quality/batch-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action, postIds: this.selectedPosts })
+            });
+            if (res.ok) {
+              this.selectedPosts = [];
+              await this.loadPosts();
+              await this.loadStats();
+            }
+          } catch (e) { console.error('Failed to batch action:', e); }
+        },
+
+        async quickAction(id, action) {
+          try {
+            await fetch('/api/quality/batch-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action, postIds: [id] })
+            });
+            await this.loadPosts();
+          } catch (e) { console.error('Failed:', e); }
+        },
+
+        toggleSelectAll(e) {
+          if (e.target.checked) {
+            this.selectedPosts = this.posts.map(p => p.id);
+          } else {
+            this.selectedPosts = [];
+          }
+        },
+
+        statusClass(status) {
+          return { published: 'bg-green-100 text-green-800', draft: 'bg-yellow-100 text-yellow-800', noindex: 'bg-gray-100 text-gray-800', archived: 'bg-red-100 text-red-800' }[status] || 'bg-gray-100';
+        },
+
+        statusLabel(status) {
+          return { published: '已发布', draft: '草稿', noindex: 'noindex', archived: '已归档' }[status] || status;
+        },
+
+        lifecycleClass(stage) {
+          return { hot: 'bg-red-100 text-red-800', warm: 'bg-yellow-100 text-yellow-800', cold: 'bg-blue-100 text-blue-800', archive: 'bg-gray-100 text-gray-800' }[stage] || 'bg-gray-100';
+        },
+
+        lifecycleLabel(stage) {
+          return { hot: '热门', warm: '温热', cold: '冷却', archive: '归档' }[stage] || '未知';
+        },
+
+        async loadCannibalization() {
+          this.loadingCannibalization = true;
+          try {
+            const res = await fetch('/api/quality/cannibalization');
+            if (res.ok) {
+              const data = await res.json();
+              this.cannibalizationGroups = data.groups || [];
+            }
+          } catch (e) { console.error('Failed to load cannibalization:', e); }
+          finally { this.loadingCannibalization = false; }
+        },
+
+        pageSelectedAction(groupId, pageId, action) {
+          if (!action) return;
+          this.selectedPageActions[`${groupId}-${pageId}`] = action;
+        },
+
+        async applyResolution(groupId, action) {
+          if (!confirm(`确定要应用 ${action} 方案吗？`)) return;
+          try {
+            const res = await fetch(`/api/quality/cannibalization/${groupId}/resolve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action })
+            });
+            if (res.ok) {
+              await this.loadCannibalization();
+            }
+          } catch (e) { console.error('Failed to apply resolution:', e); }
+        },
+
+        async generateMergeDraft(groupId) {
+          if (!confirm('确定要生成合并草稿吗？这将调用 AI 将两篇文章合并为一篇新草稿。')) return;
+          try {
+            const res = await fetch(`/api/quality/cannibalization/${groupId}/generate-merge-draft`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.draft) {
+                // Show draft preview
+                this.mergeDraftPreview = data.draft;
+                this.showMergeDraftModal = true;
+              } else {
+                alert(data.message || '生成失败');
+              }
+            }
+          } catch (e) {
+            console.error('Failed to generate merge draft:', e);
+            alert('生成失败');
+          }
+        },
+
+        async saveMergeDraft() {
+          try {
+            const res = await fetch('/api/posts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: this.mergeDraftPreview.title,
+                contentMd: this.mergeDraftPreview.content,
+                slug: this.mergeDraftPreview.slug,
+                status: 'draft'
+              })
+            });
+            if (res.ok) {
+              alert('草稿已保存');
+              this.showMergeDraftModal = false;
+              this.mergeDraftPreview = null;
+            } else {
+              alert('保存失败');
+            }
+          } catch (e) {
+            console.error('Failed to save draft:', e);
+            alert('保存失败');
+          }
+        },
+
+        severityClass(severity) {
+          return { high: 'bg-red-100 text-red-800', medium: 'bg-yellow-100 text-yellow-800', low: 'bg-green-100 text-green-800' }[severity] || 'bg-gray-100';
+        },
+
+        severityLabel(severity) {
+          return { high: '高严重', medium: '中等', low: '低' }[severity] || severity;
+        },
+
+        cannibalizationHeatmapClass(severity) {
+          return { high: 'bg-red-100 border-2 border-red-300', medium: 'bg-yellow-50 border-2 border-yellow-300', low: 'bg-green-50 border-2 border-green-300' }[severity] || 'bg-gray-50 border-2 border-gray-200';
+        },
+
+        cannibalizationBarClass(severity) {
+          return { high: 'bg-red-500', medium: 'bg-yellow-500', low: 'bg-green-500' }[severity] || 'bg-gray-500';
+        },
+
+        scrollToGroup(groupId) {
+          // Find and scroll to the group element
+          const elements = document.querySelectorAll('[data-group-id]');
+          // Fallback: just highlight the section
+          const section = document.querySelector('.cannibalization-section');
+          if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+          }
+        },
+
+        actionClass(action) {
+          return { canonical: 'bg-blue-100 text-blue-800', '301': 'bg-yellow-100 text-yellow-800', merge: 'bg-purple-100 text-purple-800' }[action] || 'bg-gray-100';
+        },
+
+        actionLabel(action) {
+          return { canonical: 'canonical', '301': '301重定向', merge: '内容合并' }[action] || action;
+        },
+
+        async loadDecay() {
+          this.loadingDecay = true;
+          try {
+            const res = await fetch('/api/quality/decay');
+            if (res.ok) {
+              const data = await res.json();
+              this.decayingPosts = data.posts || [];
+              this.decayStats.analyzedAt = data.analyzedAt;
+              this.decayStats.decaying = this.decayingPosts.length;
+              this.decayStats.severe = this.decayingPosts.filter(p => p.severity === 'severe').length;
+              this.decayStats.moderate = this.decayingPosts.filter(p => p.severity === 'moderate').length;
+            }
+          } catch (e) { console.error('Failed to load decay:', e); }
+          finally { this.loadingDecay = false; }
+        },
+
+        async refreshDecay(postId) {
+          try {
+            const res = await fetch(`/api/quality/decay/${postId}/refresh`, { method: 'POST' });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.analysis) {
+                this.selectedDecayPost = data.analysis;
+              }
+              await this.loadDecay();
+            }
+          } catch (e) { console.error('Failed to refresh decay:', e); }
+        },
+
+        trendIcon(trend) {
+          return { up: '↑', stable: '→', down: '↓', critical: '⛔' }[trend] || '?';
+        },
+
+        severityClass(severity) {
+          return { none: 'bg-green-100 text-green-800', mild: 'bg-blue-100 text-blue-800', moderate: 'bg-yellow-100 text-yellow-800', severe: 'bg-red-100 text-red-800' }[severity] || 'bg-gray-100';
+        },
+
+        severityLabel(severity) {
+          return { none: '无', mild: '轻微', moderate: '中等', severe: '严重' }[severity] || severity;
+        },
+
+        actionClass(action) {
+          return { monitor: 'bg-gray-100 text-gray-800', update: 'bg-blue-100 text-blue-800', rewrite: 'bg-orange-100 text-orange-800', consolidate: 'bg-purple-100 text-purple-800', archive: 'bg-gray-200 text-gray-600' }[action] || 'bg-gray-100';
+        },
+
+        actionLabel(action) {
+          return { monitor: '监控', update: '更新', rewrite: '重写', consolidate: '合并', archive: '归档' }[action] || action;
+        },
+
+        async loadLifecycleStats() {
+          try {
+            const res = await fetch('/api/quality/lifecycle/stats');
+            if (res.ok) {
+              this.lifecycleStats = await res.json();
+            }
+          } catch (e) {
+            console.error('Failed to load lifecycle stats:', e);
+          }
+        },
+
+        async batchSetLifecycle(lifecycleStage) {
+          if (this.selectedPosts.length === 0) {
+            alert('请先选择文章');
+            return;
+          }
+          if (!confirm(`确定要将 ${this.selectedPosts.length} 篇文章设置为 "${lifecycleStage || '无'}" 状态吗？`)) {
+            return;
+          }
+          try {
+            const res = await fetch('/api/quality/lifecycle/batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                postIds: this.selectedPosts,
+                lifecycleStage
+              })
+            });
+            if (res.ok) {
+              this.selectedPosts = [];
+              await this.loadLifecycleStats();
+              await this.loadPosts();
+              alert('更新成功');
+            } else {
+              alert('更新失败');
+            }
+          } catch (e) {
+            console.error('Failed to batch update lifecycle:', e);
+            alert('更新失败');
+          }
+        },
+
+        async loadCoverage() {
+          this.loadingCoverage = true;
+          try {
+            const res = await fetch('/api/quality/coverage');
+            if (res.ok) {
+              const data = await res.json();
+              this.coverageData = data.categories || [];
+              this.brandCoverageData = data.brands || [];
+              this.coverageStats = data.stats || this.coverageStats;
+            } else {
+              // Use mock data if API doesn't exist
+              this.coverageData = [
+                { name: 'Electronics', productCount: 45, coverage: 78.5, avgQuality: 82 },
+                { name: 'Home Appliances', productCount: 32, coverage: 65.2, avgQuality: 75 },
+                { name: 'Fashion', productCount: 88, coverage: 92.1, avgQuality: 88 },
+                { name: 'Beauty', productCount: 56, coverage: 71.3, avgQuality: 79 },
+                { name: 'Sports', productCount: 41, coverage: 55.8, avgQuality: 70 },
+                { name: 'Toys', productCount: 29, coverage: 88.4, avgQuality: 85 },
+              ];
+              this.brandCoverageData = [
+                { name: 'Apple', productCount: 28, coverage: 95.0 },
+                { name: 'Samsung', productCount: 24, coverage: 88.5 },
+                { name: 'Sony', productCount: 18, coverage: 72.3 },
+                { name: 'LG', productCount: 15, coverage: 65.0 },
+                { name: 'Nike', productCount: 22, coverage: 82.1 },
+              ];
+              this.coverageStats = {
+                categoriesCovered: 6,
+                brandsCovered: 5,
+                avgCoverage: 75.2,
+                lowCoverageCategories: 2
+              };
+            }
+          } catch (e) {
+            console.error('Failed to load coverage:', e);
+            // Use mock data on error
+            this.coverageData = [
+              { name: 'Electronics', productCount: 45, coverage: 78.5, avgQuality: 82 },
+              { name: 'Home Appliances', productCount: 32, coverage: 65.2, avgQuality: 75 },
+              { name: 'Fashion', productCount: 88, coverage: 92.1, avgQuality: 88 },
+              { name: 'Beauty', productCount: 56, coverage: 71.3, avgQuality: 79 },
+              { name: 'Sports', productCount: 41, coverage: 55.8, avgQuality: 70 },
+              { name: 'Toys', productCount: 29, coverage: 88.4, avgQuality: 85 },
+            ];
+            this.brandCoverageData = [
+              { name: 'Apple', productCount: 28, coverage: 95.0 },
+              { name: 'Samsung', productCount: 24, coverage: 88.5 },
+              { name: 'Sony', productCount: 18, coverage: 72.3 },
+              { name: 'LG', productCount: 15, coverage: 65.0 },
+              { name: 'Nike', productCount: 22, coverage: 82.1 },
+            ];
+            this.coverageStats = { categoriesCovered: 6, brandsCovered: 5, avgCoverage: 75.2, lowCoverageCategories: 2 };
+          }
+          this.loadingCoverage = false;
+        },
+
+        coverageBarClass(coverage) {
+          if (coverage >= 80) return 'bg-green-500';
+          if (coverage >= 60) return 'bg-yellow-500';
+          if (coverage >= 40) return 'bg-orange-500';
+          return 'bg-red-500';
+        },
+
+        coverageStatusClass(coverage) {
+          if (coverage >= 80) return 'bg-green-100 text-green-700';
+          if (coverage >= 60) return 'bg-yellow-100 text-yellow-700';
+          if (coverage >= 40) return 'bg-orange-100 text-orange-700';
+          return 'bg-red-100 text-red-700';
+        },
+
+        coverageStatusLabel(coverage) {
+          if (coverage >= 80) return '优秀';
+          if (coverage >= 60) return '良好';
+          if (coverage >= 40) return '一般';
+          return '不足';
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

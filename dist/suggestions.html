@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>运营建议 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="suggestionsAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">💡 运营建议</h1>
+            <p class="text-gray-500 mt-1">共 <span x-text="pagination.total"></span> 条建议</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button @click="showFilters = !showFilters" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+              filters
+            </button>
+            <button @click="loadSuggestions" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div x-show="showFilters" class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <select x-model="filterStatus" @change="loadSuggestions" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">全部状态</option>
+              <option value="pending">待处理</option>
+              <option value="approved">已批准</option>
+              <option value="executed">已执行</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+            <select x-model="filterType" @change="loadSuggestions" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">全部类型</option>
+              <option value="seo">SEO优化</option>
+              <option value="content">内容创作</option>
+              <option value="entity">实体挖掘</option>
+              <option value="ranking">排名监控</option>
+            </select>
+            <select x-model="filterSource" @change="loadSuggestions" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">全部来源</option>
+              <option value="eeat">EEAT评分</option>
+              <option value="info_gain">信息增益</option>
+              <option value="lifecycle">生命周期</option>
+              <option value="manual">手动</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Batch Actions -->
+        <div x-show="selectedIds.length > 0" class="bg-blue-50 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <span class="text-blue-700">已选择 <span x-text="selectedIds.length"></span> 条建议</span>
+          <div class="flex space-x-3">
+            <button @click="batchAction('execute')" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">▶ 批量执行</button>
+            <button @click="batchAction('approve')" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">✓ 批量批准</button>
+            <button @click="batchAction('reject')" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">✕ 批量拒绝</button>
+            <button @click="selectedIds = []" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">取消</button>
+          </div>
+        </div>
+
+        <!-- Suggestions List -->
+        <div class="space-y-4">
+          <template x-for="suggestion in suggestions" :key="suggestion.id">
+            <div class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition" :class="selectedIds.includes(suggestion.id) ? 'ring-2 ring-blue-400' : ''">
+              <div class="flex items-start justify-between">
+                <div class="flex items-start space-x-4">
+                  <input type="checkbox" :value="suggestion.id" x-model="selectedIds" class="mt-1 w-4 h-4 rounded">
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-3 mb-2">
+                      <span class="px-2 py-1 text-xs rounded-full" :class="statusClass(suggestion.status)" x-text="statusLabel(suggestion.status)"></span>
+                      <span class="px-2 py-1 text-xs rounded-full" :class="typeClass(suggestion.type)" x-text="suggestion.type || '建议'"></span>
+                      <span class="text-xs text-gray-400" x-text="suggestion.source || '系统'"></span>
+                    </div>
+
+                    <!-- Payload Content Preview -->
+                    <template x-if="suggestion.payload">
+                      <div class="bg-gray-50 rounded-lg p-4 mb-3">
+                        <p class="text-gray-700 text-sm leading-relaxed" x-text="getPayloadMessage(suggestion.payload)"></p>
+                      </div>
+                    </template>
+                    <template x-if="!suggestion.payload">
+                      <p class="text-gray-900" x-text="suggestion.message || suggestion.content || '无描述'"></p>
+                    </template>
+
+                    <div class="flex items-center space-x-4 mt-3 text-xs text-gray-500">
+                      <span>创建于: <span x-text="formatDate(suggestion.createdAt)"></span></span>
+                      <span x-show="suggestion.executedAt">执行于: <span x-text="formatDate(suggestion.executedAt)"></span></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex flex-col items-end space-y-2 ml-4">
+                  <template x-if="suggestion.status === 'pending'">
+                    <div class="flex space-x-2">
+                      <button @click="processSuggestion(suggestion.id, 'execute')" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm" title="执行">
+                        ▶ 执行
+                      </button>
+                      <button @click="processSuggestion(suggestion.id, 'approve')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm" title="批准">
+                        ✓ 批准
+                      </button>
+                      <button @click="processSuggestion(suggestion.id, 'reject')" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm" title="拒绝">
+                        ✕ 拒绝
+                      </button>
+                    </div>
+                  </template>
+                  <template x-if="suggestion.status === 'executed'">
+                    <button @click="processSuggestion(suggestion.id, 'rollback')" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm" title="回滚">
+                      ↩ 回滚
+                    </button>
+                  </template>
+                  <button @click="showDetail(suggestion)" class="text-blue-600 hover:underline text-sm">查看详情</button>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="loading" class="text-center py-12 text-gray-500">
+            <span class="text-4xl mb-2 block">⏳</span> 加载中...
+          </div>
+          <div x-show="!loading && suggestions.length === 0" class="text-center py-12 text-gray-500">
+            <span class="text-4xl mb-2 block">✨</span> 暂无建议
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex justify-center mt-6" x-show="pagination.totalPages > 1">
+          <div class="flex space-x-2">
+            <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="px-3 py-2 border rounded hover:bg-gray-100 disabled:opacity-50">上一页</button>
+            <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded" x-text="pagination.page + ' / ' + pagination.totalPages"></span>
+            <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="px-3 py-2 border rounded hover:bg-gray-100 disabled:opacity-50">下一页</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <div x-show="detailModal.show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold">建议详情</h2>
+          <button @click="detailModal.show = false" class="text-gray-500 hover:text-gray-700">✕</button>
+        </div>
+        <div x-show="detailModal.data">
+          <div class="space-y-4">
+            <div class="flex items-center space-x-3">
+              <span class="px-2 py-1 text-xs rounded-full" :class="statusClass(detailModal.data.status)" x-text="statusLabel(detailModal.data.status)"></span>
+              <span class="px-2 py-1 text-xs rounded-full" :class="typeClass(detailModal.data.type)" x-text="detailModal.data.type || '建议'"></span>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+              <pre class="text-sm text-gray-700 whitespace-pre-wrap" x-text="JSON.stringify(detailModal.data.payload || detailModal.data, null, 2)"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('suggestionsAdmin', () => ({
+        suggestions: [],
+        loading: true,
+        showFilters: false,
+        filterStatus: '',
+        filterType: '',
+        filterSource: '',
+        selectedIds: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        detailModal: { show: false, data: null },
+
+        async init() {
+          await this.loadSuggestions();
+        },
+
+        async loadSuggestions() {
+          this.loading = true;
+          try {
+            const params = new URLSearchParams();
+            if (this.filterStatus) params.append('status', this.filterStatus);
+            if (this.filterType) params.append('type', this.filterType);
+            if (this.filterSource) params.append('source', this.filterSource);
+            params.append('page', this.pagination.page);
+            params.append('limit', this.pagination.limit);
+            const res = await fetch('/api/dashboard/suggestions?' + params.toString());
+            if (res.ok) {
+              const data = await res.json();
+              this.suggestions = data.data || [];
+              this.pagination = { ...this.pagination, ...data.pagination };
+            }
+          } catch (e) { console.error('Failed to load suggestions:', e); }
+          finally { this.loading = false; }
+        },
+
+        async processSuggestion(id, action) {
+          try {
+            const res = await fetch(`/api/dashboard/suggestions/${id}/${action}`, { method: 'POST' });
+            if (res.ok) {
+              const suggestion = this.suggestions.find(s => s.id === id);
+              if (suggestion) {
+                suggestion.status = action === 'execute' ? 'executed' : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : suggestion.status;
+              }
+            }
+          } catch (e) { console.error('Failed to process suggestion:', e); }
+        },
+
+        async batchAction(action) {
+          try {
+            const res = await fetch('/api/dashboard/suggestions/batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actions: [{ action, ids: this.selectedIds }] })
+            });
+            if (res.ok) {
+              this.selectedIds = [];
+              await this.loadSuggestions();
+            }
+          } catch (e) { console.error('Failed to batch process:', e); }
+        },
+
+        showDetail(suggestion) {
+          this.detailModal.show = true;
+          this.detailModal.data = suggestion;
+        },
+
+        getPayloadMessage(payload) {
+          if (typeof payload === 'string') {
+            try {
+              payload = JSON.parse(payload);
+            } catch (e) { return payload; }
+          }
+          return payload.message || payload.content || JSON.stringify(payload);
+        },
+
+        goToPage(page) {
+          this.pagination.page = page;
+          this.loadSuggestions();
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        statusClass(status) {
+          return { pending: 'bg-yellow-100 text-yellow-800', approved: 'bg-blue-100 text-blue-800', executed: 'bg-green-100 text-green-800', rejected: 'bg-gray-100 text-gray-800' }[status] || 'bg-gray-100';
+        },
+
+        statusLabel(status) {
+          return { pending: '待处理', approved: '已批准', executed: '已执行', rejected: '已拒绝' }[status] || status;
+        },
+
+        typeClass(type) {
+          return { seo: 'bg-purple-100 text-purple-800', content: 'bg-blue-100 text-blue-800', entity: 'bg-green-100 text-green-800', ranking: 'bg-orange-100 text-orange-800' }[type] || 'bg-gray-100 text-gray-800';
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

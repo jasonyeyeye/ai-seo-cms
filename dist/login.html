@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} - {{ siteName }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6 text-center">管理后台登录</h1>
+
+    <form action="/admin/login" method="POST" class="space-y-6">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">密码</label>
+        <input type="password" name="password" required placeholder="输入管理员密码"
+               class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+
+      <div x-show="{{error}}" class="text-red-600 text-sm text-center">{{error}}</div>
+
+      <button type="submit" class="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">
+        登录
+      </button>
+    </form>
+
+    <p class="mt-6 text-center text-gray-500 text-sm">
+      <a href="/" class="text-blue-600 hover:underline">← 返回前台</a>
+    </p>
+  </div>
+</body>
+</html>

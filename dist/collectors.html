@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="collectorsApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据采集监控 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">🔄 数据管道监控</h1>
+          <div class="flex items-center space-x-3">
+            <button @click="loadAll()" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+              🔄 刷新
+            </button>
+            <button @click="showTriggerModal = true" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              ⚡ 手动触发采集
+            </button>
+          </div>
+        </div>
+
+        <!-- Adapter Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <template x-for="adapter in adapters" :key="adapter.name">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold" :class="adapterClass(adapter.name)">
+                    <span x-text="adapter.name.charAt(0).toUpperCase()"></span>
+                  </div>
+                  <div>
+                    <h3 class="font-semibold text-gray-900" x-text="adapter.name"></h3>
+                    <span class="text-xs text-gray-500" x-text="adapter.type || '适配器'"></span>
+                  </div>
+                </div>
+                <div class="w-3 h-3 rounded-full" :class="adapter.enabled ? 'bg-green-500' : 'bg-gray-300'"></div>
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-500">状态</span>
+                  <span class="font-medium" :class="adapter.status === 'idle' ? 'text-green-600' : 'text-yellow-600'" x-text="adapter.status || 'idle'"></span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-500">上次采集</span>
+                  <span class="text-gray-900" x-text="formatDate(adapter.lastFetchAt)"></span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-500">上次成功</span>
+                  <span class="text-gray-900" x-text="formatDate(adapter.lastSuccessAt)"></span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-500">成功/失败</span>
+                  <span class="text-gray-900">
+                    <span class="text-green-600" x-text="adapter.successCount || 0"></span> /
+                    <span class="text-red-600" x-text="adapter.errorCount || 0"></span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="mt-4 pt-4 border-t border-gray-100">
+                <div x-show="adapter.lastError" class="text-xs text-red-500 mb-3 truncate" x-text="'错误: ' + adapter.lastError"></div>
+                <button @click="triggerAdapter(adapter.name)" :disabled="runningAdapter === adapter.name" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 text-sm">
+                  <span x-show="runningAdapter !== adapter.name">🚀 触发采集</span>
+                  <span x-show="runningAdapter === adapter.name">采集中...</span>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">今日采集</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="stats.todayJobs">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">成功率</div>
+            <div class="text-3xl font-bold text-green-600" x-text="(stats.successRate || 0).toFixed(1) + '%'">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">采集中</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.runningJobs">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">队列积压</div>
+            <div class="text-3xl font-bold" :class="stats.pendingJobs > 10 ? 'text-red-600' : 'text-gray-900'" x-text="stats.pendingJobs">-</div>
+          </div>
+        </div>
+
+        <!-- Recent Jobs -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">📋 最近采集任务</h2>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">任务ID</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">适配器</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">状态</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">采集数量</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">耗时</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">时间</th>
+                  <th class="px-6 py-3 text-left text-gray-500 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="job in recentJobs" :key="job.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-mono text-xs" x-text="job.id.substring(0, 12) + '...'"></td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="adapterBadgeClass(job.adapter)" x-text="job.adapter"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="jobStatusClass(job.status)" x-text="jobStatusLabel(job.status)"></span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="text-green-600" x-text="job.itemsCollected || 0"></span>
+                      <span x-show="job.itemsFailed > 0" class="text-red-600 ml-1">/ <span x-text="job.itemsFailed"></span> 失败</span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-500" x-text="formatDuration(job.durationMs)"></td>
+                    <td class="px-6 py-4 text-gray-500 text-xs" x-text="formatDateTime(job.startedAt)"></td>
+                    <td class="px-6 py-4">
+                      <button @click="viewJobLogs(job)" class="text-blue-600 hover:underline text-xs">日志</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && recentJobs.length === 0" class="p-8 text-center text-gray-400">
+            暂无采集任务
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Trigger Modal -->
+  <div x-show="showTriggerModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showTriggerModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">手动触发采集</h2>
+        <button @click="showTriggerModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">选择适配器 *</label>
+          <select x-model="triggerAdapterName" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option value="">请选择...</option>
+            <template x-for="adapter in adapters" :key="adapter.name">
+              <option :value="adapter.name" x-text="adapter.name + ' (' + (adapter.enabled ? '已启用' : '已禁用') + ')'"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">采集数量限制</label>
+          <input type="number" x-model="triggerLimit" placeholder="默认100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showTriggerModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="confirmTrigger()" :disabled="!triggerAdapterName || triggering" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+          <span x-show="!triggering">确认触发</span>
+          <span x-show="triggering">触发中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job Logs Modal -->
+  <div x-show="showLogsModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showLogsModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">任务日志</h2>
+        <button @click="showLogsModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6">
+        <div x-show="selectedJob" class="mb-4">
+          <div class="grid grid-cols-4 gap-4 text-sm">
+            <div>
+              <span class="text-gray-500">任务ID:</span>
+              <span class="ml-2 font-mono text-xs" x-text="selectedJob?.id"></span>
+            </div>
+            <div>
+              <span class="text-gray-500">适配器:</span>
+              <span class="ml-2" x-text="selectedJob?.adapter"></span>
+            </div>
+            <div>
+              <span class="text-gray-500">状态:</span>
+              <span class="ml-2" x-text="jobStatusLabel(selectedJob?.status)"></span>
+            </div>
+            <div>
+              <span class="text-gray-500">耗时:</span>
+              <span class="ml-2" x-text="formatDuration(selectedJob?.durationMs)"></span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-xs overflow-auto max-h-[400px]">
+          <template x-for="(log, idx) in jobLogs" :key="idx">
+            <div class="py-1 border-b border-gray-800" :class="logLevelClass(log.level)">
+              <span class="text-gray-500" x-text="formatLogTime(log.timestamp)"></span>
+              <span class="ml-2" :class="logTextClass(log.level)" x-text="log.message"></span>
+            </div>
+          </template>
+          <div x-show="jobLogs.length === 0" class="text-gray-500 text-center py-4">暂无日志</div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+        <button @click="showLogsModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('collectorsApp', () => ({
+      adapters: [],
+      recentJobs: [],
+      stats: { todayJobs: 0, successRate: 0, runningJobs: 0, pendingJobs: 0 },
+      loading: true,
+      runningAdapter: null,
+      showTriggerModal: false,
+      showLogsModal: false,
+      triggerAdapterName: '',
+      triggerLimit: 100,
+      triggering: false,
+      selectedJob: null,
+      jobLogs: [],
+
+      async init() {
+        await this.loadAll();
+      },
+
+      async loadAll() {
+        await Promise.all([
+          this.loadAdapters(),
+          this.loadJobs(),
+          this.loadStats(),
+        ]);
+      },
+
+      async loadAdapters() {
+        try {
+          const res = await fetch('/api/collectors/status');
+          if (res.ok) {
+            const data = await res.json();
+            this.adapters = data.adapters || [];
+          }
+        } catch(e) { console.error(e); }
+      },
+
+      async loadJobs() {
+        this.loading = true;
+        try {
+          const res = await fetch('/api/collectors/jobs?limit=20');
+          if (res.ok) {
+            const data = await res.json();
+            this.recentJobs = data.jobs || [];
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+
+      async loadStats() {
+        try {
+          // Calculate stats from jobs
+          const res = await fetch('/api/collectors/jobs?limit=100');
+          if (res.ok) {
+            const data = await res.json();
+            const jobs = data.jobs || [];
+            const today = new Date().toDateString();
+            this.stats.todayJobs = jobs.filter(j => new Date(j.startedAt).toDateString() === today).length;
+            const completedJobs = jobs.filter(j => j.status === 'completed');
+            const totalSuccess = completedJobs.filter(j => (j.itemsFailed || 0) === 0).length;
+            this.stats.successRate = completedJobs.length > 0 ? (totalSuccess / completedJobs.length) * 100 : 100;
+            this.stats.runningJobs = jobs.filter(j => j.status === 'running').length;
+            this.stats.pendingJobs = jobs.filter(j => j.status === 'pending').length;
+          }
+        } catch(e) { console.error(e); }
+      },
+
+      async triggerAdapter(adapterName) {
+        this.runningAdapter = adapterName;
+        try {
+          const res = await fetch('/api/collectors/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adapter: adapterName, limit: 100 })
+          });
+          if (res.ok) {
+            alert('采集任务已触发');
+            await this.loadJobs();
+            await this.loadStats();
+          } else {
+            const err = await res.json();
+            alert('触发失败: ' + err.message);
+          }
+        } catch(e) { alert('触发失败: ' + e.message); }
+        this.runningAdapter = null;
+      },
+
+      async confirmTrigger() {
+        if (!this.triggerAdapterName) return;
+        this.triggering = true;
+        try {
+          const res = await fetch('/api/collectors/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adapter: this.triggerAdapterName, limit: this.triggerLimit || 100 })
+          });
+          if (res.ok) {
+            this.showTriggerModal = false;
+            this.triggerAdapterName = '';
+            this.triggerLimit = 100;
+            await this.loadJobs();
+            await this.loadStats();
+            alert('采集任务已触发');
+          } else {
+            const err = await res.json();
+            alert('触发失败: ' + err.message);
+          }
+        } catch(e) { alert('触发失败: ' + e.message); }
+        this.triggering = false;
+      },
+
+      async viewJobLogs(job) {
+        this.selectedJob = job;
+        this.showLogsModal = true;
+        try {
+          const res = await fetch('/api/collectors/jobs/' + job.id + '/logs');
+          if (res.ok) {
+            const data = await res.json();
+            this.jobLogs = data.logs || [];
+          }
+        } catch(e) { console.error(e); }
+      },
+
+      adapterClass(name) {
+        const classes = {
+          'amazon': 'bg-yellow-100 text-yellow-700',
+          'ebay': 'bg-blue-100 text-blue-700',
+          'cj': 'bg-green-100 text-green-700',
+        };
+        return classes[name?.toLowerCase()] || 'bg-gray-100 text-gray-700';
+      },
+
+      adapterBadgeClass(name) {
+        const classes = {
+          'amazon': 'bg-yellow-100 text-yellow-800',
+          'ebay': 'bg-blue-100 text-blue-800',
+          'cj': 'bg-green-100 text-green-800',
+        };
+        return classes[name?.toLowerCase()] || 'bg-gray-100 text-gray-800';
+      },
+
+      jobStatusClass(status) {
+        const classes = {
+          'pending': 'bg-blue-100 text-blue-700',
+          'running': 'bg-yellow-100 text-yellow-700',
+          'completed': 'bg-green-100 text-green-700',
+          'failed': 'bg-red-100 text-red-700',
+        };
+        return classes[status] || 'bg-gray-100 text-gray-700';
+      },
+
+      jobStatusLabel(status) {
+        const labels = {
+          'pending': '等待中',
+          'running': '采集中',
+          'completed': '已完成',
+          'failed': '失败',
+        };
+        return labels[status] || status;
+      },
+
+      formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      },
+
+      formatDateTime(dateStr) {
+        if (!dateStr) return '-';
+        return new Date(dateStr).toLocaleString('zh-CN');
+      },
+
+      formatDuration(ms) {
+        if (!ms) return '-';
+        if (ms < 1000) return ms + 'ms';
+        if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+        return (ms / 60000).toFixed(1) + 'm';
+      },
+
+      formatLogTime(timestamp) {
+        if (!timestamp) return '';
+        return new Date(timestamp).toLocaleTimeString('zh-CN');
+      },
+
+      logLevelClass(level) {
+        const classes = {
+          'info': 'text-gray-300',
+          'warn': 'text-yellow-300',
+          'error': 'text-red-300',
+        };
+        return classes[level] || 'text-gray-300';
+      },
+
+      logTextClass(level) {
+        const classes = {
+          'info': 'text-gray-300',
+          'warn': 'text-yellow-300',
+          'error': 'text-red-300',
+        };
+        return classes[level] || 'text-gray-300';
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

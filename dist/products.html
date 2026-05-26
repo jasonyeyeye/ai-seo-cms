@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="productsAdmin">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商品管理 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">📦 商品管理</h1>
+          <button @click="showCreateModal = true" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            <i class="fas fa-plus mr-2"></i> 添加商品
+          </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[200px]">
+              <input type="text" x-model="searchQuery" @keyup.enter="loadProducts()" placeholder="搜索商品名称、品牌..." class="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+            </div>
+            <select x-model="filterBrand" @change="loadProducts()" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部品牌</option>
+              <template x-for="brand in brands" :key="brand"><option :value="brand" x-text="brand"></option></template>
+            </select>
+            <select x-model="filterCategory" @change="loadProducts()" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部分类</option>
+              <template x-for="cat in categories" :key="cat.slug"><option :value="cat.slug" x-text="cat.name"></option></template>
+            </select>
+            <select x-model="filterStatus" @change="loadProducts()" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部状态</option>
+              <option value="published">已发布</option>
+              <option value="draft">草稿</option>
+            </select>
+            <button @click="loadProducts()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">搜索</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-4 mb-6">
+          <button @click="activeTab = 'all'" class="px-4 py-2 rounded-lg font-medium" :class="activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+            全部商品 <span class="ml-1 text-xs" x-text="'(' + totalProducts + ')'"></span>
+          </button>
+          <button @click="activeTab = 'review'" class="px-4 py-2 rounded-lg font-medium relative" :class="activeTab === 'review' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+            待审核 <span x-show="reviewCount > 0" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center" x-text="reviewCount"></span>
+          </button>
+        </div>
+
+        <!-- Products Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">商品</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">品牌</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">分类</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">价格</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">平台</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">状态</th>
+                  <th class="px-4 py-3 text-left text-gray-500 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template x-for="product in products" :key="product.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-3">
+                        <img :src="product.thumbnailUrl || '/placeholder.png'" class="w-12 h-12 rounded object-cover" />
+                        <div>
+                          <div class="font-medium text-gray-900 max-w-[200px] truncate" x-text="product.name"></div>
+                          <div class="text-xs text-gray-400" x-text="product.slug"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600" x-text="product.brand || '-'"></td>
+                    <td class="px-4 py-3 text-gray-600" x-text="product.category || '-'"></td>
+                    <td class="px-4 py-3">
+                      <div class="font-medium text-gray-900" x-text="'$' + parseFloat(product.currentPrice || product.originalPrice || 0).toFixed(2)"></div>
+                      <div x-show="product.originalPrice && product.originalPrice > product.currentPrice" class="text-xs text-red-500 line-through" x-text="'$' + parseFloat(product.originalPrice).toFixed(2)"></div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600" x-text="(product.platformProducts && product.platformProducts[0]) ? product.platformProducts[0].platform : '-'"></td>
+                    <td class="px-4 py-3">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="product.isPublished ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'" x-text="product.isPublished ? '已发布' : '草稿'"></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <button @click="editProduct(product)" class="text-indigo-600 hover:underline text-xs mr-2">编辑</button>
+                      <a :href="'/product/' + product.slug" target="_blank" class="text-gray-500 hover:underline text-xs mr-2">查看</a>
+                      <button @click="deleteProduct(product.id)" class="text-red-500 hover:underline text-xs">删除</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && products.length === 0" class="p-8 text-center text-gray-400">
+            暂无商品
+          </div>
+
+          <!-- Pagination -->
+          <div x-show="totalPages > 1" class="px-4 py-3 border-t border-gray-200 flex justify-between items-center">
+            <div class="text-sm text-gray-500">共 <span x-text="totalProducts"></span> 件商品</div>
+            <div class="flex gap-2">
+              <button @click="goToPage(currentPage - 1)" :disabled="currentPage <= 1" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">上一页</button>
+              <span class="px-3 py-1">第 <span x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+              <button @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 rounded disabled:opacity-50">下一页</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Edit Modal -->
+  <div x-show="editModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="editModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">编辑商品</h2>
+        <button @click="editModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">商品名称 *</label>
+          <input type="text" x-model="editData.name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+          <input type="text" x-model="editData.slug" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">品牌</label>
+            <input type="text" x-model="editData.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+            <input type="text" x-model="editData.category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+          <textarea x-model="editData.description" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">摘要 (AI生成)</label>
+          <textarea x-model="editData.summary" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">缩略图 URL</label>
+          <input type="text" x-model="editData.thumbnailUrl" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">图片 URL (JSON数组)</label>
+          <textarea x-model="editData.imagesJson" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="editData.isPublished" id="editPublished" class="w-4 h-4" />
+          <label for="editPublished" class="text-sm text-gray-700">已发布</label>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="editModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="saveProduct()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Modal -->
+  <div x-show="showCreateModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showCreateModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">添加商品</h2>
+        <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">商品名称 *</label>
+          <input type="text" x-model="createData.name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Slug *</label>
+          <input type="text" x-model="createData.slug" placeholder="auto-generated-from-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">品牌</label>
+            <input type="text" x-model="createData.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+            <input type="text" x-model="createData.category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+          <textarea x-model="createData.description" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">缩略图 URL</label>
+          <input type="text" x-model="createData.thumbnailUrl" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showCreateModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="createProduct()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('productsAdmin', () => ({
+      products: [],
+      loading: true,
+      searchQuery: '',
+      filterBrand: '',
+      filterCategory: '',
+      filterStatus: '',
+      activeTab: 'all',
+      reviewCount: 0,
+      totalProducts: 0,
+      currentPage: 1,
+      totalPages: 0,
+      editModal: false,
+      showCreateModal: false,
+      editingProduct: null,
+      editData: {},
+      createData: {},
+      brands: [],
+      categories: [
+        { slug: 'electronics', name: '电子产品' },
+        { slug: 'home-appliances', name: '家用电器' },
+        { slug: 'fashion', name: '时尚服饰' },
+        { slug: 'beauty', name: '美妆护肤' },
+        { slug: 'sports', name: '运动户外' },
+        { slug: 'toys', name: '玩具游戏' },
+      ],
+      async init() {
+        await this.loadProducts();
+        await this.loadBrands();
+      },
+      async loadBrands() {
+        // Get unique brands from products
+        try {
+          const res = await fetch('/api/products?limit=100');
+          if (res.ok) {
+            const data = await res.json();
+            const brandSet = new Set((data.products || []).map(p => p.brand).filter(Boolean));
+            this.brands = [...brandSet];
+          }
+        } catch(e) { console.error(e); }
+      },
+      async loadProducts() {
+        this.loading = true;
+        try {
+          let url = '/api/products?page=' + this.currentPage + '&limit=20';
+          if (this.searchQuery) url += '&search=' + encodeURIComponent(this.searchQuery);
+          if (this.filterBrand) url += '&brand=' + encodeURIComponent(this.filterBrand);
+          if (this.filterCategory) url += '&category=' + encodeURIComponent(this.filterCategory);
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            this.products = data.products || [];
+            this.totalProducts = data.pagination?.total || 0;
+            this.totalPages = data.pagination?.totalPages || 1;
+            this.currentPage = data.pagination?.page || 1;
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+      goToPage(page) {
+        this.currentPage = page;
+        this.loadProducts();
+      },
+      editProduct(product) {
+        this.editingProduct = product;
+        this.editData = {
+          name: product.name,
+          slug: product.slug,
+          brand: product.brand || '',
+          brandSlug: product.brandSlug || '',
+          category: product.category || '',
+          categorySlug: product.categorySlug || '',
+          description: product.description || '',
+          summary: product.summary || '',
+          thumbnailUrl: product.thumbnailUrl || '',
+          imagesJson: product.images ? JSON.stringify(product.images) : '[]',
+          isPublished: product.isPublished || false,
+        };
+        this.editModal = true;
+      },
+      async saveProduct() {
+        try {
+          const images = this.editData.imagesJson ? JSON.parse(this.editData.imagesJson) : [];
+          const res = await fetch('/api/products/' + this.editingProduct.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: this.editData.name,
+              slug: this.editData.slug,
+              brand: this.editData.brand,
+              brandSlug: this.editData.brandSlug,
+              category: this.editData.category,
+              categorySlug: this.editData.categorySlug,
+              description: this.editData.description,
+              summary: this.editData.summary,
+              thumbnailUrl: this.editData.thumbnailUrl,
+              images,
+              isPublished: this.editData.isPublished,
+            })
+          });
+          if (res.ok) {
+            this.editModal = false;
+            await this.loadProducts();
+          } else {
+            const err = await res.json();
+            alert('保存失败: ' + err.error);
+          }
+        } catch(e) { alert('保存失败: ' + e.message); }
+      },
+      async createProduct() {
+        try {
+          const slug = this.createData.slug || this.createData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+          const res = await fetch('/api/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: this.createData.name,
+              slug,
+              brand: this.createData.brand,
+              category: this.createData.category,
+              description: this.createData.description,
+              thumbnailUrl: this.createData.thumbnailUrl,
+            })
+          });
+          if (res.ok) {
+            this.showCreateModal = false;
+            this.createData = {};
+            await this.loadProducts();
+          } else {
+            const err = await res.json();
+            alert('创建失败: ' + err.error);
+          }
+        } catch(e) { alert('创建失败: ' + e.message); }
+      },
+      async deleteProduct(id) {
+        if (!confirm('确定要删除这个商品吗？')) return;
+        try {
+          const res = await fetch('/api/products/' + id, { method: 'DELETE' });
+          if (res.ok) {
+            await this.loadProducts();
+          } else {
+            alert('删除失败');
+          }
+        } catch(e) { alert('删除失败: ' + e.message); }
+      }
+    }));
+  });
+  </script>
+</body>
+</html>

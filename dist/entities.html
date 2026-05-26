@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>实体管理 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="entitiesAdmin">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">🏷️ 实体管理</h1>
+            <p class="text-gray-500 mt-1">共 <span x-text="pagination.total"></span> 个实体</p>
+          </div>
+          <div class="flex space-x-3">
+            <button @click="showDiscoverModal = true" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+              🔍 挖掘实体
+            </button>
+            <a href="/admin/entities/new" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              + 添加实体
+            </a>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="bg-white rounded-xl shadow-sm mb-6">
+          <div class="flex border-b">
+            <button @click="activeTab = 'list'" :class="activeTab === 'list' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'" class="px-6 py-3 font-medium transition">
+              📋 列表
+            </button>
+            <button @click="switchToGraph" :class="activeTab === 'graph' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'" class="px-6 py-3 font-medium transition">
+              🔗 关系图
+            </button>
+          </div>
+        </div>
+
+        <!-- List Tab -->
+        <div x-show="activeTab === 'list'">
+          <!-- Discover Modal -->
+          <div x-show="showDiscoverModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 w-full max-w-md">
+              <h2 class="text-xl font-bold mb-4">🔍 挖掘新实体</h2>
+              <p class="text-gray-500 text-sm mb-4">输入种子关键词，AI将自动挖掘相关实体</p>
+              <input type="text" x-model="discoverKeyword" placeholder="例如：iPhone 16" class="w-full px-4 py-2 border rounded-lg mb-4" />
+              <div class="flex justify-end space-x-3">
+                <button @click="showDiscoverModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button @click="discoverEntities" :disabled="discovering" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+                  <span x-show="!discovering">开始挖掘</span>
+                  <span x-show="discovering">挖掘中...</span>
+                </button>
+              </div>
+              <div x-show="discoverResult" class="mt-4 p-4 bg-green-50 rounded-lg">
+                <p class="text-green-700" x-text="discoverResult"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Merge Modal (Single Entity) -->
+          <div x-show="showMergeModalFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 w-full max-w-md">
+              <h2 class="text-xl font-bold mb-4">🔗 合并实体</h2>
+              <p class="text-gray-500 text-sm mb-2">将 <span x-text="mergeSourceEntity?.name"></span> 合并到目标实体</p>
+              <p class="text-gray-400 text-xs mb-4">合并后：属性、关系、文章关联都会被转移，目标实体保留</p>
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">选择目标实体</label>
+                <select x-model="mergeTargetId" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">-- 选择目标实体 --</option>
+                  <template x-for="entity in availableMergeTargets" :key="entity.id">
+                    <option :value="entity.id" x-text="entity.name + ' (' + typeLabel(entity.type) + ')'"></option>
+                  </template>
+                </select>
+              </div>
+              <div x-show="mergePreview" class="mb-4 p-4 bg-purple-50 rounded-lg text-sm">
+                <p class="text-purple-700" x-text="mergePreview"></p>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button @click="showMergeModalFlag = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button @click="executeMerge" :disabled="merging || !mergeTargetId" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                  <span x-show="!merging">确认合并</span>
+                  <span x-show="merging">合并中...</span>
+                </button>
+              </div>
+              <div x-show="mergeResult" class="mt-4 p-4 bg-green-50 rounded-lg">
+                <p class="text-green-700" x-text="mergeResult"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Multi-Entity Merge Modal -->
+          <div x-show="showMultiMergeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 w-full max-w-lg">
+              <h2 class="text-xl font-bold mb-4">🔗 批量合并实体</h2>
+              <p class="text-gray-500 text-sm mb-2">将多个实体合并为一个主实体</p>
+              <p class="text-gray-400 text-xs mb-4">合并后：属性、关系、文章关联都会被转移，主实体保留，被合并实体将被删除</p>
+
+              <!-- Selected Entities -->
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">已选择的实体 (<span x-text="selectedEntities.length"></span>)</label>
+                <div class="border rounded-lg p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                  <template x-for="entityId in selectedEntities" :key="entityId">
+                    <div class="flex items-center justify-between py-1 text-sm">
+                      <span x-text="getEntityName(entityId)"></span>
+                      <span class="text-xs px-2 py-0.5 rounded" :class="typeClass(getEntityType(entityId))" x-text="typeLabel(getEntityType(entityId))"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Primary Entity Selection -->
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">选择主实体（保留）</label>
+                <select x-model="multiMergePrimaryId" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">-- 选择主实体 --</option>
+                  <template x-for="entityId in selectedEntities" :key="entityId">
+                    <option :value="entityId" x-text="getEntityName(entityId) + ' (' + typeLabel(getEntityType(entityId)) + ')'"></option>
+                  </template>
+                </select>
+              </div>
+
+              <!-- Merge Preview -->
+              <div x-show="multiMergePreview" class="mb-4 p-4 bg-purple-50 rounded-lg text-sm">
+                <p class="text-purple-700 font-medium mb-1">合并预览：</p>
+                <p class="text-purple-600" x-text="multiMergePreview"></p>
+              </div>
+
+              <!-- Merge Result -->
+              <div x-show="multiMergeResult" class="mb-4 p-4 rounded-lg" :class="multiMergeSuccess ? 'bg-green-50' : 'bg-red-50'">
+                <p :class="multiMergeSuccess ? 'text-green-700' : 'text-red-700'" x-text="multiMergeResult"></p>
+              </div>
+
+              <div class="flex justify-end space-x-3">
+                <button @click="showMultiMergeModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+                <button @click="executeMultiMerge" :disabled="multiMerging || !multiMergePrimaryId || selectedEntities.length < 2" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                  <span x-show="!multiMerging">确认合并 (<span x-text="selectedEntities.length - 1"></span> 个)</span>
+                  <span x-show="multiMerging">合并中...</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remine Modal -->
+          <div x-show="showRemineModalFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-8 w-full max-w-md">
+              <h2 class="text-xl font-bold mb-4">⛏️ 重新挖掘实体</h2>
+              <p class="text-gray-500 text-sm mb-2">对 <span x-text="remineTargetEntity?.name"></span> 进行深度挖掘</p>
+              <p class="text-gray-400 text-xs mb-4">从关联文章中提取新属性和新关系</p>
+              <div x-show="remining" class="text-center py-8">
+                <span class="text-4xl mb-2 block">⏳</span>
+                <p class="text-gray-500">正在挖掘...</p>
+                <p class="text-gray-400 text-sm mt-2">这可能需要几秒钟</p>
+              </div>
+              <div x-show="!remining && remineResult" class="mt-4 p-4 bg-indigo-50 rounded-lg">
+                <p class="text-indigo-700" x-text="remineResult"></p>
+              </div>
+              <div x-show="!remining && !remineResult" class="flex justify-end mt-4">
+                <button @click="executeRemine" :disabled="remining" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                  开始挖掘
+                </button>
+              </div>
+              <div x-show="!remining && remineResult" class="flex justify-end mt-4">
+                <button @click="showRemineModalFlag = false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">关闭</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+            <div class="flex flex-wrap gap-4 items-center">
+              <select x-model="filterType" @change="loadEntities" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">全部类型</option>
+                <option value="product">产品</option>
+                <option value="brand">品牌</option>
+                <option value="technology">技术</option>
+                <option value="person">人物</option>
+                <option value="concept">概念</option>
+              </select>
+              <input type="text" x-model="searchQuery" @keyup.enter="loadEntities" placeholder="搜索实体名称或描述..."
+                     class="flex-1 min-w-[200px] px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button @click="loadEntities" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">🔍 搜索</button>
+            </div>
+          </div>
+
+          <!-- Bulk Actions -->
+          <div x-show="selectedEntities.length > 0" class="bg-blue-50 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <span class="text-blue-700">已选择 <span x-text="selectedEntities.length"></span> 个实体</span>
+            <div class="flex space-x-3">
+              <button @click="mergeSelected" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">合并</button>
+              <button @click="deleteSelected" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">删除</button>
+              <button @click="selectedEntities = []" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm">取消</button>
+            </div>
+          </div>
+
+          <!-- Entity List -->
+          <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left">
+                    <input type="checkbox" @change="toggleSelectAll" :checked="selectedEntities.length === entities.length && entities.length > 0" class="w-4 h-4 rounded">
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">描述</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="entity in entities" :key="entity.id || entity.slug">
+                  <tr class="hover:bg-gray-50" :class="selectedEntities.includes(entity.id || entity.slug) ? 'bg-blue-50' : ''">
+                    <td class="px-4 py-3">
+                      <input type="checkbox" :value="entity.id || entity.slug" x-model="selectedEntities" class="w-4 h-4 rounded">
+                    </td>
+                    <td class="px-6 py-4">
+                      <a :href="'/entity/' + entity.slug" class="text-gray-900 hover:text-blue-600 font-medium" x-text="entity.name"></a>
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class="px-2 py-1 text-xs rounded-full" :class="typeClass(entity.type)" x-text="typeLabel(entity.type)"></span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-500 text-sm truncate max-w-xs" x-text="entity.description || '-'"></td>
+                    <td class="px-6 py-4">
+                      <div class="flex space-x-3">
+                        <a :href="'/admin/entities/' + entity.slug + '/edit'" class="text-blue-600 hover:underline text-sm">编辑</a>
+                        <button @click="discoverEntity(entity.slug)" class="text-green-600 hover:underline text-sm">挖掘</button>
+                        <button @click="showMergeModal(entity)" class="text-purple-600 hover:underline text-sm">合并</button>
+                        <button @click="remineEntity(entity)" class="text-indigo-600 hover:underline text-sm">重新挖掘</button>
+                        <button @click="deleteEntity(entity.slug)" class="text-red-600 hover:underline text-sm">删除</button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div x-show="loading" class="text-center py-12 text-gray-500">
+              <span class="text-4xl mb-2 block">⏳</span> 加载中...
+            </div>
+            <div x-show="!loading && entities.length === 0" class="text-center py-12 text-gray-500">
+              <span class="text-4xl mb-2 block">📭</span> 暂无实体
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div class="flex justify-center mt-6" x-show="pagination.totalPages > 1">
+            <div class="flex space-x-2">
+              <button @click="goToPage(pagination.page - 1)" :disabled="pagination.page <= 1" class="px-3 py-2 border rounded hover:bg-gray-100 disabled:opacity-50">上一页</button>
+              <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded" x-text="pagination.page + ' / ' + pagination.totalPages"></span>
+              <button @click="goToPage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages" class="px-3 py-2 border rounded hover:bg-gray-100 disabled:opacity-50">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Graph Tab -->
+        <div x-show="activeTab === 'graph'" x-cloak>
+          <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-4">
+                <select x-model="graphMode" @change="loadGraph" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="full">全量关系图</option>
+                  <option value="single">单实体子图</option>
+                </select>
+                <select x-show="graphMode === 'single'" x-model="selectedGraphEntity" @change="loadGraph" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">请选择实体...</option>
+                  <template x-for="entity in entities" :key="entity.id">
+                    <option :value="entity.id" x-text="entity.name"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="text-sm text-gray-500">
+                <span x-text="graphData.nodes.length"></span> 节点 / <span x-text="graphData.edges.length"></span> 边
+              </div>
+            </div>
+            <div class="border rounded-lg overflow-hidden" style="height: 500px; position: relative;">
+              <div id="d3-graph-container" x-show="!graphLoading && graphData.nodes.length > 0"></div>
+              <div x-show="graphLoading" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
+                <span class="text-4xl mb-2 block">⏳</span>
+              </div>
+              <div x-show="!graphLoading && graphData.nodes.length === 0" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                暂无关系数据
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Node Detail Modal -->
+        <div x-show="showNodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showNodeModal = false">
+          <div class="bg-white rounded-xl p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold" x-text="selectedNode?.name"></h2>
+              <button @click="showNodeModal = false" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div class="space-y-3">
+              <div><span class="font-medium text-gray-500">类型：</span><span class="px-2 py-1 text-xs rounded-full" :class="typeClass(selectedNode?.type)" x-text="typeLabel(selectedNode?.type)"></span></div>
+              <div><span class="font-medium text-gray-500">Slug：</span><a :href="'/entity/' + selectedNode?.slug" class="text-blue-600 hover:underline" x-text="selectedNode?.slug"></a></div>
+              <div x-show="selectedNode?.description"><span class="font-medium text-gray-500">描述：</span><span x-text="selectedNode?.description"></span></div>
+              <div class="border-t pt-3 mt-3">
+                <span class="font-medium text-gray-500">关联关系：</span>
+                <div class="mt-2 space-y-1">
+                  <template x-for="edge in getRelatedEdges(selectedNode?.id)" :key="edge.id">
+                    <div class="text-sm flex items-center">
+                      <span class="text-gray-400">—</span>
+                      <span class="mx-2 px-2 py-0.5 bg-gray-100 rounded text-xs" x-text="edge.predicate"></span>
+                      <span x-text="getNodeById(edge.source === selectedNode?.id ? edge.target : edge.source)?.name"></span>
+                    </div>
+                  </template>
+                  <div x-show="getRelatedEdges(selectedNode?.id).length === 0" class="text-gray-400 text-sm">无关联</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('entitiesAdmin', () => ({
+        entities: [],
+        loading: true,
+        filterType: '',
+        searchQuery: '',
+        selectedEntities: [],
+        showDiscoverModal: false,
+        discoverKeyword: '',
+        discovering: false,
+        discoverResult: '',
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        activeTab: 'list',
+        graphData: { nodes: [], edges: [] },
+        graphLoading: false,
+        graphMode: 'full',
+        selectedGraphEntity: '',
+        showNodeModal: false,
+        selectedNode: null,
+        nodePositions: {},
+        dragging: null,
+        draggingNode: null,
+        dragOffset: { x: 0, y: 0 },
+        // Merge modal
+        showMergeModalFlag: false,
+        mergeSourceEntity: null,
+        mergeTargetId: '',
+        merging: false,
+        mergeResult: '',
+        availableMergeTargets: [],
+        // Multi-Entity Merge modal
+        showMultiMergeModal: false,
+        multiMergePrimaryId: '',
+        multiMerging: false,
+        multiMergeResult: '',
+        multiMergeSuccess: false,
+        // Remine modal
+        showRemineModalFlag: false,
+        remineTargetEntity: null,
+        remining: false,
+        remineResult: '',
+
+        async init() {
+          // Check URL params for default tab
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('tab') === 'graph') {
+            this.activeTab = 'graph';
+            await this.loadGraph();
+          } else {
+            await this.loadEntities();
+          }
+        },
+
+        async loadEntities() {
+          this.loading = true;
+          try {
+            let url = '/api/entities';
+            const params = new URLSearchParams();
+            if (this.filterType) params.append('type', this.filterType);
+            if (params.toString()) url += '?' + params.toString();
+            const res = await fetch(url);
+            const data = await res.json();
+            let entities = data.entities || [];
+            if (this.searchQuery) {
+              const q = this.searchQuery.toLowerCase();
+              entities = entities.filter(e => e.name.toLowerCase().includes(q) || (e.description && e.description.toLowerCase().includes(q)));
+            }
+            this.entities = entities;
+            this.pagination.total = entities.length;
+            this.pagination.totalPages = Math.ceil(entities.length / this.pagination.limit);
+          } catch (e) { console.error('Failed to load entities:', e); }
+          finally { this.loading = false; }
+        },
+
+        async switchToGraph() {
+          this.activeTab = 'graph';
+          await this.loadGraph();
+        },
+
+        async loadGraph() {
+          this.graphLoading = true;
+          try {
+            let url = '/api/entities/graph';
+            if (this.graphMode === 'single' && this.selectedGraphEntity) {
+              url = '/api/entities/graph/' + this.selectedGraphEntity;
+            }
+            const res = await fetch(url);
+            this.graphData = await res.json();
+            this.$nextTick(() => this.renderD3Graph());
+          } catch (e) { console.error('Failed to load graph:', e); }
+          finally { this.graphLoading = false; }
+        },
+
+        renderD3Graph() {
+          const container = document.getElementById('d3-graph-container');
+          if (!container) return;
+
+          // Clear previous graph using textContent (prevents XSS)
+          container.textContent = '';
+
+          if (!this.graphData.nodes || this.graphData.nodes.length === 0) return;
+
+          const width = container.clientWidth || 900;
+          const height = 480;
+
+          // Create SVG with D3
+          const svg = d3.select('#d3-graph-container')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('viewBox', [0, 0, width, height])
+            .attr('class', 'entity-graph-svg');
+
+          // Define arrow marker
+          svg.append('defs').append('marker')
+            .attr('id', 'd3-arrowhead')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 30)
+            .attr('refY', 0)
+            .attr('markerWidth', 8)
+            .attr('markerHeight', 8)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', '#6b7280');
+
+          // Create zoom layer
+          const g = svg.append('g').attr('class', 'zoom-layer');
+
+          // Prepare data - D3 requires source/target strings for links
+          const nodes = this.graphData.nodes.map(n => ({ ...n }));
+          const links = this.graphData.edges.map(e => ({
+            ...e,
+            source: e.source,
+            target: e.target
+          }));
+
+          // Create force simulation
+          const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(150))
+            .force('charge', d3.forceManyBody().strength(-400))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(50));
+
+          // Create links
+          const link = g.append('g')
+            .selectAll('line')
+            .data(links)
+            .join('line')
+            .attr('stroke', '#9ca3af')
+            .attr('stroke-width', 1.5)
+            .attr('marker-end', 'url(#d3-arrowhead)')
+            .attr('class', 'graph-edge');
+
+          // Create edge labels
+          const linkLabel = g.append('g')
+            .selectAll('text')
+            .data(links)
+            .join('text')
+            .attr('class', 'graph-edge-label')
+            .attr('dy', -5)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#6b7280')
+            .attr('font-size', '10')
+            .text(d => d.predicate || '');
+
+          // Create node groups
+          const node = g.append('g')
+            .selectAll('g')
+            .data(nodes)
+            .join('g')
+            .attr('cursor', 'pointer')
+            .attr('class', 'graph-node')
+            .call(d3.drag()
+              .on('start', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+              })
+              .on('drag', (event, d) => {
+                d.fx = event.x;
+                d.fy = event.y;
+              })
+              .on('end', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+              }));
+
+          // Add outer glow circle for hover effect
+          node.append('circle')
+            .attr('r', 30)
+            .attr('fill', 'none')
+            .attr('stroke', d => this.typeColor(d.type))
+            .attr('stroke-width', 2)
+            .attr('stroke-opacity', 0.3)
+            .attr('class', 'node-glow');
+
+          // Add main circle to nodes
+          node.append('circle')
+            .attr('r', 24)
+            .attr('fill', d => this.typeColor(d.type))
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 2);
+
+          // Add type icon to nodes
+          node.append('text')
+            .attr('dy', 4)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#fff')
+            .attr('font-size', '12')
+            .attr('font-weight', 'bold')
+            .text(d => this.typeIcon(d.type));
+
+          // Add name labels below nodes
+          node.append('text')
+            .attr('dy', 40)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#374151')
+            .attr('font-size', '11')
+            .attr('font-weight', '500')
+            .text(d => d.name.length > 15 ? d.name.slice(0, 15) + '...' : d.name);
+
+          // Add type badge
+          node.append('text')
+            .attr('dy', 52)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#9ca3af')
+            .attr('font-size', '9')
+            .text(d => this.typeLabel(d.type) || '');
+
+          // Update positions on tick
+          simulation.on('tick', () => {
+            link
+              .attr('x1', d => d.source.x)
+              .attr('y1', d => d.source.y)
+              .attr('x2', d => d.target.x)
+              .attr('y2', d => d.target.y);
+
+            linkLabel
+              .attr('x', d => (d.source.x + d.target.x) / 2)
+              .attr('y', d => (d.source.y + d.target.y) / 2);
+
+            node.attr('transform', d => `translate(${d.x},${d.y})`);
+          });
+
+          // Click handler for nodes
+          node.on('click', (event, d) => {
+            event.stopPropagation();
+            this.selectedNode = d;
+            this.showNodeModal = true;
+          });
+
+          // Hover effects
+          node.on('mouseenter', function(event, d) {
+            d3.select(this).select('.node-glow')
+              .transition()
+              .duration(200)
+              .attr('stroke-opacity', 0.8)
+              .attr('r', 35);
+          });
+
+          node.on('mouseleave', function(event, d) {
+            d3.select(this).select('.node-glow')
+              .transition()
+              .duration(200)
+              .attr('stroke-opacity', 0.3)
+              .attr('r', 30);
+          });
+
+          // Add zoom behavior
+          const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+              g.attr('transform', event.transform);
+            });
+
+          svg.call(zoom);
+
+          // Initial zoom to fit
+          const initialScale = 0.9;
+          svg.call(zoom.transform, d3.zoomIdentity
+            .translate(width / 2, height / 2)
+            .scale(initialScale)
+            .translate(-width / 2, height / 2));
+
+          // Double-click to reset zoom
+          svg.on('dblclick.zoom', () => {
+            svg.transition().duration(500).call(
+              zoom.transform,
+              d3.zoomIdentity
+                .translate(width / 2, height / 2)
+                .scale(initialScale)
+                .translate(-width / 2, height / 2)
+            );
+          });
+
+          // Click on background to deselect
+          svg.on('click', () => {
+            this.showNodeModal = false;
+          });
+        },
+
+        showNodeInfo(node) {
+          this.selectedNode = node;
+          this.showNodeModal = true;
+        },
+
+        getRelatedEdges(nodeId) {
+          if (!nodeId) return [];
+          return this.graphData.edges.filter(e => e.source === nodeId || e.target === nodeId);
+        },
+
+        getNodeById(id) {
+          return this.graphData.nodes.find(n => n.id === id);
+        },
+
+        typeColor(type) {
+          return { product: '#3b82f6', brand: '#8b5cf6', technology: '#10b981', person: '#f97316', concept: '#6b7280' }[type] || '#6b7280';
+        },
+
+        toggleSelectAll(e) {
+          if (e.target.checked) {
+            this.selectedEntities = this.entities.map(e => e.id || e.slug);
+          } else {
+            this.selectedEntities = [];
+          }
+        },
+
+        async discoverEntities() {
+          if (!this.discoverKeyword.trim()) return;
+          this.discovering = true;
+          this.discoverResult = '';
+          try {
+            const res = await fetch('/api/entities/discover', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ seedKeyword: this.discoverKeyword })
+            });
+            const data = await res.json();
+            this.discoverResult = `发现 ${data.discovered || 0} 个新实体`;
+            await this.loadEntities();
+          } catch (e) {
+            this.discoverResult = '挖掘失败';
+          } finally {
+            this.discovering = false;
+          }
+        },
+
+        async discoverEntity(slug) {
+          try {
+            const res = await fetch(`/api/entities/${slug}/discover`, { method: 'POST' });
+            const data = await res.json();
+            alert(`${slug} 挖掘完成：添加了 ${data.attributesAdded || 0} 个属性`);
+          } catch (e) { console.error('Failed to discover entity:', e); }
+        },
+
+        async deleteEntity(slug) {
+          if (!confirm('确定要删除这个实体吗？')) return;
+          try {
+            await fetch(`/api/entities/${slug}`, { method: 'DELETE' });
+            await this.loadEntities();
+          } catch (e) { console.error('Failed to delete entity:', e); }
+        },
+
+        async mergeSelected() {
+          if (this.selectedEntities.length < 2) {
+            alert('请选择至少2个实体进行合并');
+            return;
+          }
+          // Open the multi-merge modal instead of using prompt
+          this.multiMergePrimaryId = '';
+          this.multiMergeResult = '';
+          this.multiMergeSuccess = false;
+          this.showMultiMergeModal = true;
+        },
+
+        showMergeModal(entity) {
+          this.mergeSourceEntity = entity;
+          this.mergeTargetId = '';
+          this.mergeResult = '';
+          // Filter out the source entity and merged entities from available targets
+          this.availableMergeTargets = this.entities.filter(e => e.id !== entity.id && !e.merged);
+          this.showMergeModalFlag = true;
+        },
+
+        get mergePreview() {
+          if (!this.mergeSourceEntity || !this.mergeTargetId) return '';
+          const target = this.availableMergeTargets.find(e => e.id == this.mergeTargetId);
+          if (!target) return '';
+          return `将 "${this.mergeSourceEntity.name}" 的属性、关系、文章关联合并到 "${target.name}"`;
+        },
+
+        async executeMerge() {
+          if (!this.mergeSourceEntity || !this.mergeTargetId) return;
+          this.merging = true;
+          this.mergeResult = '';
+          try {
+            const res = await fetch('/api/entities/merge', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                primaryEntityId: this.mergeTargetId,
+                mergeEntityIds: [this.mergeSourceEntity.id]
+              })
+            });
+            const data = await res.json();
+            if (data.error) {
+              this.mergeResult = `合并失败: ${data.error}`;
+            } else {
+              this.mergeResult = `合并成功！转移了 ${data.mergedAttributes || 0} 个属性、${data.mergedRelations || 0} 个关系、${data.mergedPosts || 0} 篇文章关联`;
+              await this.loadEntities();
+              setTimeout(() => { this.showMergeModalFlag = false; }, 2000);
+            }
+          } catch (e) {
+            this.mergeResult = '合并失败: ' + e.message;
+          } finally {
+            this.merging = false;
+          }
+        },
+
+        // Helper methods for multi-entity merge
+        getEntityName(entityId) {
+          const entity = this.entities.find(e => (e.id || e.slug) == entityId);
+          return entity ? entity.name : `实体 #${entityId}`;
+        },
+
+        getEntityType(entityId) {
+          const entity = this.entities.find(e => (e.id || e.slug) == entityId);
+          return entity ? entity.type : '';
+        },
+
+        getEntityTypeClass(entityType) {
+          return this.typeClass(entityType);
+        },
+
+        get multiMergePreview() {
+          if (!this.multiMergePrimaryId || this.selectedEntities.length < 2) return '';
+          const primaryName = this.getEntityName(this.multiMergePrimaryId);
+          const mergeCount = this.selectedEntities.length - 1;
+          const mergeNames = this.selectedEntities
+            .filter(id => id != this.multiMergePrimaryId)
+            .map(id => `"${this.getEntityName(id)}"`)
+            .join(', ');
+          return `将 ${mergeNames} 合并到 "${primaryName}"，共转移 ${mergeCount} 个实体的属性、关系和文章关联`;
+        },
+
+        async executeMultiMerge() {
+          if (!this.multiMergePrimaryId || this.selectedEntities.length < 2) return;
+          this.multiMerging = true;
+          this.multiMergeResult = '';
+          this.multiMergeSuccess = false;
+
+          const mergeEntityIds = this.selectedEntities.filter(id => id != this.multiMergePrimaryId);
+
+          try {
+            const res = await fetch('/api/entities/merge', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                primaryEntityId: this.multiMergePrimaryId,
+                mergeEntityIds: mergeEntityIds
+              })
+            });
+            const data = await res.json();
+
+            if (data.error) {
+              this.multiMergeResult = `合并失败: ${data.error}`;
+              this.multiMergeSuccess = false;
+            } else {
+              const merged = data.merged || 0;
+              const failed = data.failed || 0;
+              if (failed === 0) {
+                this.multiMergeResult = `合并成功！成功合并 ${merged} 个实体`;
+                this.multiMergeSuccess = true;
+              } else {
+                this.multiMergeResult = `部分成功：合并了 ${merged} 个实体，失败 ${failed} 个`;
+                this.multiMergeSuccess = false;
+              }
+              this.selectedEntities = [];
+              await this.loadEntities();
+              setTimeout(() => { this.showMultiMergeModal = false; }, 2000);
+            }
+          } catch (e) {
+            this.multiMergeResult = '合并失败: ' + e.message;
+            this.multiMergeSuccess = false;
+          } finally {
+            this.multiMerging = false;
+          }
+        },
+
+        remineEntity(entity) {
+          this.remineTargetEntity = entity;
+          this.remineResult = '';
+          this.remining = false;
+          this.showRemineModalFlag = true;
+        },
+
+        async executeRemine() {
+          if (!this.remineTargetEntity) return;
+          this.remining = true;
+          this.remineResult = '';
+          try {
+            const res = await fetch(`/api/entities/remine?id=${this.remineTargetEntity.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.error) {
+              this.remineResult = `挖掘失败: ${data.error}`;
+            } else {
+              this.remineResult = `挖掘完成！分析了 ${data.postsAnalyzed || 0} 篇文章，新增 ${data.attributesAdded || 0} 个属性、${data.relationsAdded || 0} 个关系`;
+              await this.loadEntities();
+            }
+          } catch (e) {
+            this.remineResult = '挖掘失败: ' + e.message;
+          } finally {
+            this.remining = false;
+          }
+        },
+
+        async deleteSelected() {
+          if (!confirm(`确定要删除 ${this.selectedEntities.length} 个实体吗？`)) return;
+          try {
+            for (const id of this.selectedEntities) {
+              await fetch(`/api/entities/${id}`, { method: 'DELETE' });
+            }
+            this.selectedEntities = [];
+            await this.loadEntities();
+          } catch (e) { console.error('Failed to delete entities:', e); }
+        },
+
+        async goToPage(page) {
+          this.pagination.page = page;
+          await this.loadEntities();
+        },
+
+        typeClass(type) {
+          return { product: 'bg-blue-100 text-blue-800', brand: 'bg-purple-100 text-purple-800', technology: 'bg-green-100 text-green-800', person: 'bg-orange-100 text-orange-800', concept: 'bg-gray-100 text-gray-800' }[type] || 'bg-gray-100';
+        },
+
+        typeIcon(type) {
+          return { product: '📦', brand: '🏷️', technology: '⚙️', person: '👤', concept: '💡' }[type] || '📌';
+        },
+
+        typeLabel(type) {
+          return { product: '产品', brand: '品牌', technology: '技术', person: '人物', concept: '概念' }[type] || type || '未知';
+        }
+      }));
+    });
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .entity-graph-svg {
+      cursor: grab;
+    }
+    .entity-graph-svg:active {
+      cursor: grabbing;
+    }
+    .graph-node {
+      transition: transform 0.1s ease;
+    }
+    .graph-edge {
+      transition: stroke 0.2s ease;
+    }
+    .graph-edge:hover {
+      stroke: #4b5563;
+      stroke-width: 2.5;
+    }
+    .graph-edge-label {
+      pointer-events: none;
+      user-select: none;
+    }
+    .node-glow {
+      transition: all 0.2s ease;
+    }
+  </style>
+</body>
+</html>

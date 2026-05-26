@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>成本熔断 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="costGuard">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">💰 成本熔断面板</h1>
+            <p class="text-gray-500 mt-1">实时监控 AI 成本与熔断控制</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <button @click="loadCosts" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+            <button @click="resetCircuitBreaker" x-show="circuitBreakerOpen" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">🔴 重置熔断</button>
+          </div>
+        </div>
+
+        <!-- Budget Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">今日消费</div>
+            <div class="text-3xl font-bold" :class="costStatus.todayCost > costStatus.dailyBudget ? 'text-red-600' : 'text-gray-900'" x-text="'$' + costStatus.todayCost.toFixed(4)"></div>
+            <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+              <div class="h-2 rounded-full transition-all" :class="costStatus.usagePercent > 95 ? 'bg-red-500' : costStatus.usagePercent > 80 ? 'bg-yellow-500' : 'bg-blue-500'" :style="'width: ' + Math.min(costStatus.usagePercent, 100) + '%'"></div>
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              <span x-text="costStatus.usagePercent.toFixed(1)"></span>% / 预算: $<span x-text="costStatus.dailyBudget.toFixed(2)"></span>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">剩余预算</div>
+            <div class="text-3xl font-bold" :class="costStatus.budgetRemaining < 0 ? 'text-red-600' : 'text-green-600'" x-text="'$' + Math.max(0, costStatus.budgetRemaining).toFixed(2)"></div>
+            <div class="text-xs text-gray-500 mt-1">
+              剩余 <span x-text="costStatus.dailyBudget - costStatus.todayCost > 0 ? ((costStatus.dailyBudget - costStatus.todayCost) / costStatus.dailyBudget * 100).toFixed(1) : 0"></span>%
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">今日请求</div>
+            <div class="text-3xl font-bold text-blue-600" x-text="costStatus.requestCount"></div>
+            <div class="text-xs text-gray-500 mt-1">
+              <span x-text="costStatus.totalTokens.toLocaleString()"></span> tokens
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">熔断状态</div>
+            <div class="flex items-center mt-2">
+              <span class="text-3xl" x-text="circuitBreakerOpen ? '🔴' : '🟢'"></span>
+              <span class="ml-2 font-bold" :class="circuitBreakerOpen ? 'text-red-600' : 'text-green-600'" x-text="circuitBreakerOpen ? '已激活' : '正常'"></span>
+            </div>
+            <div class="text-xs text-gray-500 mt-1" x-text="circuitBreakerOpen ? 'AI请求被拦截' : 'AI服务正常'"></div>
+          </div>
+        </div>
+
+        <!-- Cost by Provider -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📊</span> 按供应商成本分布
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <template x-for="provider in costByProvider" :key="provider.name">
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-medium" x-text="provider.name"></span>
+                  <span class="text-xs px-2 py-0.5 rounded bg-green-100 text-green-800">启用</span>
+                </div>
+                <div class="text-2xl font-bold" x-text="'$' + provider.cost.toFixed(4)"></div>
+                <div class="text-xs text-gray-500 mt-1">
+                  <span x-text="provider.requests"></span> 次请求 ·
+                  <span x-text="provider.tokens.toLocaleString()"></span> tokens
+                </div>
+              </div>
+            </template>
+            <div x-show="costByProvider.length === 0" class="col-span-3 text-center py-8 text-gray-500">
+              暂无供应商消费数据
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost by Model -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">🤖</span> 按模型成本分布
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <template x-for="model in costByModel" :key="model.name">
+              <div class="border rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div>
+                    <span class="font-medium" x-text="model.name"></span>
+                    <span class="text-xs text-gray-400 ml-2" x-text="model.provider"></span>
+                  </div>
+                  <span class="text-xs px-2 py-0.5 rounded" :class="model.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="model.isActive ? '活跃' : '备用'"></span>
+                </div>
+                <div class="text-2xl font-bold" x-text="'$' + model.cost.toFixed(4)"></div>
+                <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                  <div class="h-2 rounded-full transition-all" :class="model.usagePercent > 90 ? 'bg-red-500' : model.usagePercent > 70 ? 'bg-yellow-500' : 'bg-blue-500'" :style="'width:' + Math.min(model.usagePercent, 100) + '%'"></div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                  <span x-text="model.tokens.toLocaleString() + ' tokens'"></span>
+                  <span x-text="model.usagePercent.toFixed(1) + '%'"></span>
+                </div>
+              </div>
+            </template>
+            <div x-show="costByModel.length === 0" class="col-span-2 text-center py-8 text-gray-500">
+              暂无模型消费数据
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Cost Logs -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">📋</span> 最近消费记录
+          </h2>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">供应商</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tokens</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">成本</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <template x-for="log in recentLogs" :key="log.id">
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-500" x-text="formatDateTime(log.createdAt)"></td>
+                    <td class="px-4 py-3 text-sm" x-text="log.provider"></td>
+                    <td class="px-4 py-3 text-sm font-mono" x-text="log.model"></td>
+                    <td class="px-4 py-3 text-sm" x-text="Number(log.tokensUsed).toLocaleString()"></td>
+                    <td class="px-4 py-3 text-sm font-bold" x-text="'$' + (log.costEstimated || 0).toFixed(4)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="recentLogs.length === 0" class="text-center py-8 text-gray-500">暂无消费记录</div>
+        </div>
+
+        <!-- Cost Alert Settings -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">⚙️</span> 熔断配置
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">每日预算 (Tokens)</label>
+              <input type="number" x-model="settings.dailyBudget" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p class="text-xs text-gray-500 mt-1">当前: <span x-text="costStatus.dailyBudget"></span></p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">预警阈值 (%)</label>
+              <input type="number" x-model="settings.warningThreshold" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p class="text-xs text-gray-500 mt-1">默认: 80%</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">熔断阈值 (%)</label>
+              <input type="number" x-model="settings.circuitBreakerThreshold" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p class="text-xs text-gray-500 mt-1">默认: 95%</p>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <p class="text-sm text-gray-600">
+              <strong>注意:</strong> 熔断配置通过环境变量控制 (DAILY_TOKEN_BUDGET, COST_ALERT_THRESHOLD, CIRCUIT_BREAKER_THRESHOLD)
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('costGuard', () => ({
+        circuitBreakerOpen: false,
+        circuitBreakerResetTime: null,
+        costStatus: {
+          todayCost: 0,
+          dailyBudget: 200000,
+          budgetRemaining: 200000,
+          usagePercent: 0,
+          requestCount: 0,
+          totalTokens: 0
+        },
+        costByProvider: [],
+        costByModel: [],
+        recentLogs: [],
+        modelBudgets: {
+          groq: 100000,
+          gemini: 100000
+        },
+        settings: {
+          dailyBudget: 200000,
+          warningThreshold: 80,
+          circuitBreakerThreshold: 95
+        },
+
+        async init() {
+          await this.loadCosts();
+          setInterval(() => this.loadCosts(), 30000);
+        },
+
+        async loadCosts() {
+          try {
+            // Load overall cost stats
+            const statsRes = await fetch('/api/dashboard/stats');
+            if (statsRes.ok) {
+              const data = await statsRes.json();
+              if (data.apiUsage?.today) {
+                this.costStatus.todayCost = data.apiUsage.today.cost || 0;
+                this.costStatus.requestCount = data.apiUsage.today.requests || 0;
+                this.costStatus.totalTokens = data.apiUsage.today.tokens || 0;
+                this.costStatus.usagePercent = this.costStatus.dailyBudget > 0
+                  ? (this.costStatus.todayCost / this.costStatus.dailyBudget) * 100
+                  : 0;
+                this.costStatus.budgetRemaining = this.costStatus.dailyBudget - this.costStatus.todayCost;
+              }
+            }
+
+            // Load circuit breaker state
+            const cbRes = await fetch('/api/cost-guard/status');
+            if (cbRes.ok) {
+              const cbData = await cbRes.json();
+              this.circuitBreakerOpen = cbData.isOpen || false;
+              this.circuitBreakerResetTime = cbData.resetTime;
+            }
+
+            // Load provider breakdown
+            const providerRes = await fetch('/api/cost-guard/providers');
+            if (providerRes.ok) {
+              const providerData = await providerRes.json();
+              this.costByProvider = providerData.providers || [];
+            }
+
+            // Load model breakdown
+            const modelRes = await fetch('/api/cost-guard/models');
+            if (modelRes.ok) {
+              const modelData = await modelRes.json();
+              this.costByModel = modelData.models || [];
+            }
+
+            // Load recent logs
+            const logsRes = await fetch('/api/cost-guard/logs?limit=20');
+            if (logsRes.ok) {
+              const logsData = await logsRes.json();
+              this.recentLogs = logsData.logs || [];
+            }
+          } catch (e) {
+            console.error('Failed to load costs:', e);
+          }
+        },
+
+        async resetCircuitBreaker() {
+          if (!confirm('确定要重置熔断状态吗？')) return;
+          try {
+            const res = await fetch('/api/cost-guard/reset', { method: 'POST' });
+            if (res.ok) {
+              this.circuitBreakerOpen = false;
+              alert('熔断已重置');
+            }
+          } catch (e) {
+            console.error('Failed to reset circuit breaker:', e);
+          }
+        },
+
+        formatDateTime(dateStr) {
+          if (!dateStr) return '';
+          return new Date(dateStr).toLocaleString('zh-CN');
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

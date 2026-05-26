@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>运维日志 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen" x-data="logsViewer">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">📋 运维日志</h1>
+            <p class="text-gray-500 mt-1">Worker 日志、API 日志、错误追踪</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <select x-model="logType" @change="loadLogs" class="px-4 py-2 border rounded-lg">
+              <option value="api">API 日志</option>
+              <option value="worker">Worker 日志</option>
+              <option value="error">错误日志</option>
+              <option value="audit">审计日志</option>
+            </select>
+            <button @click="loadLogs" class="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄 刷新</button>
+            <button @click="exportLogs" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">📥 导出</button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <div>
+              <label class="text-xs text-gray-500">时间范围</label>
+              <select x-model="timeRange" @change="loadLogs" class="px-4 py-2 border rounded-lg">
+                <option value="1h">最近 1 小时</option>
+                <option value="6h">最近 6 小时</option>
+                <option value="24h">最近 24 小时</option>
+                <option value="7d">最近 7 天</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">日志级别</label>
+              <select x-model="level" @change="loadLogs" class="px-4 py-2 border rounded-lg">
+                <option value="">全部</option>
+                <option value="info">INFO</option>
+                <option value="warn">WARN</option>
+                <option value="error">ERROR</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="text-xs text-gray-500">搜索</label>
+              <input type="text" x-model="searchQuery" @keyup.enter="loadLogs" placeholder="搜索日志内容..." class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">总日志数</div>
+            <div class="text-2xl font-bold" x-text="stats.total.toLocaleString()">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">INFO</div>
+            <div class="text-2xl font-bold text-blue-600" x-text="stats.info.toLocaleString()">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">WARN</div>
+            <div class="text-2xl font-bold text-yellow-600" x-text="stats.warn.toLocaleString()">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="text-sm text-gray-500">ERROR</div>
+            <div class="text-2xl font-bold text-red-600" x-text="stats.error.toLocaleString()">-</div>
+          </div>
+        </div>
+
+        <!-- Log Stream -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
+            <span class="text-sm text-gray-500">
+              <span x-text="filteredLogs.length.toLocaleString()"></span> 条日志
+            </span>
+            <div class="flex items-center space-x-2">
+              <label class="flex items-center text-sm">
+                <input type="checkbox" x-model="autoRefresh" @change="toggleAutoRefresh" class="w-4 h-4 mr-1">
+                自动刷新
+              </label>
+              <button @click="clearLogs" class="text-xs text-red-600 hover:underline">清空显示</button>
+            </div>
+          </div>
+
+          <div class="log-container h-96 overflow-y-auto font-mono text-sm">
+            <template x-for="(log, index) in filteredLogs" :key="index">
+              <div class="px-4 py-2 border-b hover:bg-gray-50" :class="log.level === 'error' ? 'bg-red-50' : log.level === 'warn' ? 'bg-yellow-50' : ''">
+                <div class="flex items-start">
+                  <span class="text-xs text-gray-400 flex-shrink-0 w-40" x-text="formatTime(log.timestamp)"></span>
+                  <span class="px-1.5 py-0.5 text-xs rounded flex-shrink-0 mr-2" :class="levelClass(log.level)" x-text="log.level.toUpperCase()"></span>
+                  <span class="text-xs text-gray-500 flex-shrink-0 mr-3" x-text="'[' + log.source + ']'"></span>
+                  <span class="flex-1 text-gray-700 break-all" x-text="log.message"></span>
+                </div>
+                <div x-show="log.details" class="mt-1 ml-24 text-xs text-gray-500 bg-gray-100 p-2 rounded overflow-auto max-h-20">
+                  <pre x-text="typeof log.details === 'string' ? log.details : JSON.stringify(log.details, null, 2)"></pre>
+                </div>
+              </div>
+            </template>
+            <div x-show="filteredLogs.length === 0" class="text-center py-12 text-gray-500">
+              <span class="text-4xl mb-2 block">📭</span>
+              暂无日志
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('logsViewer', () => ({
+        logs: [],
+        filteredLogs: [],
+        logType: 'api',
+        timeRange: '24h',
+        level: '',
+        searchQuery: '',
+        autoRefresh: false,
+        refreshInterval: null,
+        stats: { total: 0, info: 0, warn: 0, error: 0 },
+
+        async init() {
+          await this.loadLogs();
+        },
+
+        async loadLogs() {
+          try {
+            const params = new URLSearchParams();
+            params.append('type', this.logType);
+            params.append('range', this.timeRange);
+            if (this.level) params.append('level', this.level);
+            if (this.searchQuery) params.append('q', this.searchQuery);
+
+            const res = await fetch('/api/logs?' + params.toString());
+            if (res.ok) {
+              const data = await res.json();
+              this.logs = data.logs || [];
+              this.filteredLogs = this.logs;
+              this.calculateStats();
+            }
+          } catch (e) {
+            console.error('Failed to load logs:', e);
+            // Mock data for demo
+            this.logs = this.generateMockLogs();
+            this.filteredLogs = this.logs;
+            this.calculateStats();
+          }
+        },
+
+        generateMockLogs() {
+          const levels = ['info', 'info', 'info', 'warn', 'error'];
+          const sources = ['api', 'worker', 'queue', 'embedding'];
+          const messages = [
+            'API request completed successfully',
+            'Worker processed job 12345',
+            'Queue depth: 12 tasks pending',
+            'Embedding calculation completed',
+            'API rate limit approached',
+            'Database query slow (350ms)',
+            'Worker crashed, restarting...',
+            'Memory usage at 78%',
+            'GSC sync completed',
+            'Cache invalidated for /posts/*'
+          ];
+
+          return Array.from({ length: 50 }, (_, i) => ({
+            timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+            level: levels[Math.floor(Math.random() * levels.length)],
+            source: sources[Math.floor(Math.random() * sources.length)],
+            message: messages[Math.floor(Math.random() * messages.length)],
+            details: Math.random() > 0.7 ? { key: 'value', count: Math.floor(Math.random() * 100) } : null
+          })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        },
+
+        calculateStats() {
+          this.stats.total = this.filteredLogs.length;
+          this.stats.info = this.filteredLogs.filter(l => l.level === 'info').length;
+          this.stats.warn = this.filteredLogs.filter(l => l.level === 'warn').length;
+          this.stats.error = this.filteredLogs.filter(l => l.level === 'error').length;
+        },
+
+        toggleAutoRefresh() {
+          if (this.autoRefresh) {
+            this.refreshInterval = setInterval(() => this.loadLogs(), 10000);
+          } else if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+          }
+        },
+
+        clearLogs() {
+          this.filteredLogs = [];
+        },
+
+        exportLogs() {
+          const blob = new Blob([JSON.stringify(this.filteredLogs, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'logs-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+        },
+
+        formatTime(timestamp) {
+          return new Date(timestamp).toLocaleString('zh-CN');
+        },
+
+        levelClass(level) {
+          return {
+            info: 'bg-blue-100 text-blue-800',
+            warn: 'bg-yellow-100 text-yellow-800',
+            error: 'bg-red-100 text-red-800'
+          }[level] || 'bg-gray-100 text-gray-800';
+        }
+      }));
+    });
+  </script>
+</body>
+</html>

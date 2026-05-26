@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="brandsAdmin">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>品牌 Logo 管理 - AI Shopping 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="flex min-h-screen">
+    {{ include('partials/admin-sidebar') }}
+
+    <main class="flex-1 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">🏷️ 品牌 Logo 管理</h1>
+          <button @click="showUploadModal = true" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            <i class="fas fa-upload mr-2"></i> 上传 Logo
+          </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">品牌总数</div>
+            <div class="text-3xl font-bold text-gray-900" x-text="stats.totalBrands">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">已上传 Logo</div>
+            <div class="text-3xl font-bold text-green-600" x-text="stats.withLogo">-</div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="text-sm text-gray-500 mb-1">待上传</div>
+            <div class="text-3xl font-bold text-yellow-600" x-text="stats.withoutLogo">-</div>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div class="flex flex-wrap gap-4 items-center">
+            <input type="text" x-model="searchQuery" @keyup.enter="loadBrands" placeholder="搜索品牌名称..." class="px-4 py-2 border border-gray-300 rounded-lg min-w-[200px]" />
+            <select x-model="filterStatus" @change="loadBrands" class="px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">全部</option>
+              <option value="withLogo">已上传 Logo</option>
+              <option value="withoutLogo">待上传 Logo</option>
+            </select>
+            <button @click="loadBrands" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">搜索</button>
+          </div>
+        </div>
+
+        <!-- Brands Grid -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+            <template x-for="brand in brands" :key="brand.name">
+              <div class="border border-gray-200 rounded-xl p-6 hover:shadow-md transition">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <template x-if="brand.logoUrl">
+                        <img :src="brand.logoUrl" class="w-14 h-14 object-contain" />
+                      </template>
+                      <template x-if="!brand.logoUrl">
+                        <i class="fas fa-building text-gray-300 text-2xl"></i>
+                      </template>
+                    </div>
+                    <div>
+                      <h3 class="font-semibold text-gray-900" x-text="brand.name"></h3>
+                      <p class="text-sm text-gray-500" x-text="brand.productCount + ' 件商品'"></p>
+                    </div>
+                  </div>
+                  <span class="px-2 py-1 rounded text-xs font-medium" :class="brand.logoUrl ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="brand.logoUrl ? '已上传' : '待上传'"></span>
+                </div>
+                <div class="flex gap-2">
+                  <button @click="editBrandLogo(brand)" class="flex-1 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 text-sm">
+                    <i class="fas fa-edit mr-1"></i> 更换 Logo
+                  </button>
+                  <template x-if="brand.logoUrl">
+                    <a :href="brand.logoUrl" target="_blank" class="px-3 py-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 text-sm">
+                      <i class="fas fa-eye"></i>
+                    </a>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div x-show="loading" class="p-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+          </div>
+          <div x-show="!loading && brands.length === 0" class="p-8 text-center text-gray-400">
+            暂无品牌数据
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Upload Modal -->
+  <div x-show="showUploadModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showUploadModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">上传品牌 Logo</h2>
+        <button @click="showUploadModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">品牌名称 *</label>
+          <input type="text" x-model="uploadData.brandName" placeholder="输入品牌名称" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">选择 Logo 文件</label>
+          <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-400 transition cursor-pointer" @click="$refs.logoInput.click()">
+            <template x-if="!uploadData.previewUrl">
+              <div>
+                <i class="fas fa-cloud-upload-alt text-4xl text-gray-300 mb-2"></i>
+                <p class="text-sm text-gray-500">点击选择图片或拖拽到此处</p>
+                <p class="text-xs text-gray-400 mt-1">支持 PNG, JPG, SVG (最大 2MB)</p>
+              </div>
+            </template>
+            <template x-if="uploadData.previewUrl">
+              <div>
+                <img :src="uploadData.previewUrl" class="max-h-32 mx-auto object-contain" />
+                <p class="text-sm text-gray-500 mt-2" x-text="uploadData.fileName"></p>
+              </div>
+            </template>
+          </div>
+          <input type="file" x-ref="logoInput" @change="handleFileSelect" accept="image/png,image/jpeg,image/svg+xml" class="hidden" />
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showUploadModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="uploadLogo()" :disabled="!uploadData.brandName || !uploadData.file || uploading" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+          <span x-show="!uploading">上传</span>
+          <span x-show="uploading">上传中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div x-show="showEditModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div @click.away="showEditModal = false" class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-900">编辑 Logo</h2>
+        <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="text-center">
+          <div class="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center mx-auto mb-4 overflow-hidden">
+            <img :src="editData.currentLogoUrl || '/placeholder.png'" class="max-h-20 object-contain" />
+          </div>
+          <p class="font-medium text-gray-900" x-text="editData.brandName"></p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">更换 Logo</label>
+          <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-indigo-400 transition cursor-pointer" @click="$refs.editLogoInput.click()">
+            <template x-if="!editData.previewUrl">
+              <div>
+                <i class="fas fa-cloud-upload-alt text-2xl text-gray-300 mb-1"></i>
+                <p class="text-xs text-gray-500">点击更换图片</p>
+              </div>
+            </template>
+            <template x-if="editData.previewUrl">
+              <div>
+                <img :src="editData.previewUrl" class="max-h-20 mx-auto object-contain" />
+                <p class="text-xs text-gray-500 mt-1">点击更换</p>
+              </div>
+            </template>
+          </div>
+          <input type="file" x-ref="editLogoInput" @change="handleEditFileSelect" accept="image/png,image/jpeg,image/svg+xml" class="hidden" />
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showEditModal = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
+        <button @click="updateLogo()" :disabled="!editData.file || updating" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+          <span x-show="!updating">更新</span>
+          <span x-show="updating">更新中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('brandsAdmin', () => ({
+      brands: [],
+      loading: true,
+      searchQuery: '',
+      filterStatus: '',
+      stats: { totalBrands: 0, withLogo: 0, withoutLogo: 0 },
+      showUploadModal: false,
+      showEditModal: false,
+      uploading: false,
+      updating: false,
+      uploadData: { brandName: '', file: null, previewUrl: null, fileName: '' },
+      editData: { brandName: '', brandSlug: '', currentLogoUrl: '', file: null, previewUrl: null },
+
+      async init() {
+        await this.loadBrands();
+        await this.loadStats();
+      },
+
+      async loadBrands() {
+        this.loading = true;
+        try {
+          const params = new URLSearchParams();
+          if (this.searchQuery) params.append('search', this.searchQuery);
+          if (this.filterStatus === 'withLogo') params.append('hasLogo', 'true');
+          if (this.filterStatus === 'withoutLogo') params.append('hasLogo', 'false');
+          const res = await fetch('/api/brands?' + params.toString());
+          if (res.ok) {
+            const data = await res.json();
+            this.brands = data.brands || [];
+          } else {
+            // Use mock data if API doesn't exist
+            this.brands = [
+              { name: 'Apple', slug: 'apple', productCount: 28, logoUrl: null },
+              { name: 'Samsung', slug: 'samsung', productCount: 24, logoUrl: null },
+              { name: 'Sony', slug: 'sony', productCount: 18, logoUrl: null },
+              { name: 'LG', slug: 'lg', productCount: 15, logoUrl: null },
+              { name: 'Nike', slug: 'nike', productCount: 22, logoUrl: null },
+              { name: 'Adidas', slug: 'adidas', productCount: 19, logoUrl: null },
+              { name: 'Dell', slug: 'dell', productCount: 12, logoUrl: null },
+              { name: 'HP', slug: 'hp', productCount: 10, logoUrl: null },
+            ];
+          }
+        } catch(e) { console.error(e); }
+        this.loading = false;
+      },
+
+      async loadStats() {
+        try {
+          const res = await fetch('/api/brands/stats');
+          if (res.ok) {
+            this.stats = await res.json();
+          } else {
+            this.stats = { totalBrands: this.brands.length, withLogo: this.brands.filter(b => b.logoUrl).length, withoutLogo: this.brands.filter(b => !b.logoUrl).length };
+          }
+        } catch(e) { console.error(e); }
+        // Fallback stats
+        if (!this.stats.totalBrands) {
+          this.stats = { totalBrands: this.brands.length, withLogo: this.brands.filter(b => b.logoUrl).length, withoutLogo: this.brands.filter(b => !b.logoUrl).length };
+        }
+      },
+
+      handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          alert('文件大小不能超过 2MB');
+          return;
+        }
+        this.uploadData.file = file;
+        this.uploadData.fileName = file.name;
+        this.uploadData.previewUrl = URL.createObjectURL(file);
+      },
+
+      handleEditFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          alert('文件大小不能超过 2MB');
+          return;
+        }
+        this.editData.file = file;
+        this.editData.previewUrl = URL.createObjectURL(file);
+      },
+
+      async uploadLogo() {
+        if (!this.uploadData.brandName || !this.uploadData.file) return;
+        this.uploading = true;
+        try {
+          const formData = new FormData();
+          formData.append('brandName', this.uploadData.brandName);
+          formData.append('logo', this.uploadData.file);
+          const res = await fetch('/api/brands/upload-logo', {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            this.showUploadModal = false;
+            this.uploadData = { brandName: '', file: null, previewUrl: null, fileName: '' };
+            await this.loadBrands();
+            await this.loadStats();
+            alert('Logo 上传成功');
+          } else {
+            alert('上传失败');
+          }
+        } catch(e) { alert('上传失败: ' + e.message); }
+        this.uploading = false;
+      },
+
+      editBrandLogo(brand) {
+        this.editData = {
+          brandName: brand.name,
+          brandSlug: brand.slug,
+          currentLogoUrl: brand.logoUrl,
+          file: null,
+          previewUrl: null
+        };
+        this.showEditModal = true;
+      },
+
+      async updateLogo() {
+        if (!this.editData.brandSlug || !this.editData.file) return;
+        this.updating = true;
+        try {
+          const formData = new FormData();
+          formData.append('logo', this.editData.file);
+          const res = await fetch('/api/brands/' + this.editData.brandSlug + '/logo', {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            this.showEditModal = false;
+            await this.loadBrands();
+            await this.loadStats();
+            alert('Logo 更新成功');
+          } else {
+            alert('更新失败');
+          }
+        } catch(e) { alert('更新失败: ' + e.message); }
+        this.updating = false;
+      }
+    }));
+  });
+  </script>
+</body>
+</html>
