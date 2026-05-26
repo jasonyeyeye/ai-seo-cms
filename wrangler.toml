@@ -3,11 +3,8 @@ main = "src/worker/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Pages deployment (static frontend)
-pages_build_output_dir = "dist"
-
 [vars]
-SITE_URL = "https://ai-shopping.pages.dev"
+SITE_URL = "https://aibuylab.com"
 SITE_TITLE = "AI Shopping"
 BCRYPT_ROUNDS = "12"
 
@@ -17,13 +14,9 @@ account_id = "3e8c5385498b295ad3873e07c1b049e5"
 [[d1_databases]]
 binding = "DB"
 database_name = "ai-shopping"
-database_id = "1c177abe-8f7d-4c81-9846-f56f3542725b"
+database_id = "f078849f-4d0e-4c2d-866c-5d9ee5d037b7"
 
 # KV Namespaces
-[[kv_namespaces]]
-binding = "CACHE_KV"
-id = "d9d116294afb4c0aa09ea59beb99e57c"
-
 [[kv_namespaces]]
 binding = "SEARCH_CACHE"
 id = "9f58ddc751a8486c9c0bfe438f196379"
@@ -31,10 +24,6 @@ id = "9f58ddc751a8486c9c0bfe438f196379"
 [[kv_namespaces]]
 binding = "PRODUCT_CACHE"
 id = "a18c0f0e41674ae48dc2d31db8a61ec2"
-
-[[kv_namespaces]]
-binding = "RATE_LIMIT_KV"
-id = "d9d116294afb4c0aa09ea59beb99e57c"
 
 # R2 Bucket
 [[r2_buckets]]
